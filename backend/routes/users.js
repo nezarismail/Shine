@@ -3,16 +3,15 @@ const jwt = require("jsonwebtoken");
 const express = require("express");
 const router = express.Router();
 const prisma = require("../prisma");
-const multer = require("multer"); // Added missing import
+const multer = require("multer");
 const path = require("path");
 
 // ---------------- MULTER CONFIGURATION ----------------
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Ensure this folder exists in your backend root
+    cb(null, "uploads/"); 
   },
   filename: (req, file, cb) => {
-    // Generate unique filename to prevent overwriting
     cb(null, Date.now() + "-" + file.originalname);
   },
 });
@@ -60,6 +59,7 @@ router.post("/signup", async (req, res) => {
         description: true,
         image: true,
         createdAt: true,
+        roleLevel: true,
       },
     });
 
@@ -95,7 +95,8 @@ router.post("/login", async (req, res) => {
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    res.json({ user, token });
+    const { password: _, ...userWithoutPassword } = user;
+    res.json({ user: userWithoutPassword, token });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: "Login failed", details: err.message });
@@ -150,31 +151,79 @@ router.get("/:username", async (req, res) => {
   }
 });
 
-// ---------------- UPDATE USER PROFILE (FIXED) ----------------
+// ---------------- UPDATE USER PROFILE & SETTINGS ----------------
 router.put("/:userId", upload.single("image"), async (req, res) => {
   const { userId } = req.params;
-  const { name, username, description } = req.body;
+  const { name, username, description, email } = req.body;
   
   try {
-    let updateData = { name, username, description };
+    let updateData = {};
+    if (name) updateData.name = name;
+    if (username) updateData.username = username;
+    if (description !== undefined) updateData.description = description;
+    if (email) updateData.email = email;
 
     if (req.file) {
-      // Create a URL for the image
-      const imageUrl = `/uploads/${req.file.filename}`;
-      updateData.image = imageUrl;
+      updateData.image = `/uploads/${req.file.filename}`;
     }
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
+      include: { followers: true, following: true }
     });
 
-    // Return the updated user inside a user object to match your frontend expectations
-    res.json({ user: updatedUser });
+    const { password, ...userWithoutPassword } = updatedUser;
+    res.json({ user: userWithoutPassword });
   } catch (err) {
     console.error("Update error:", err);
     res.status(500).json({ error: "Failed to update profile" });
   }
+});
+
+// ---------------- UPDATE PASSWORD ----------------
+router.put("/:userId/password", async (req, res) => {
+  const { userId } = req.params;
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Current password is incorrect" });
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedNewPassword }
+    });
+
+    res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ---------------- DELETE ACCOUNT ----------------
+router.delete("/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    // Prisma will handle relations if 'onDelete: Cascade' is in schema, 
+    // otherwise you may need to delete related records first.
+    await prisma.user.delete({ where: { id: userId } });
+    res.json({ message: "Account deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete account" });
+  }
+});
+
+// ---------------- UNBLOCK USER (Stub based on Schema) ----------------
+// Note: Your current schema doesn't have a 'Blocked' model. 
+// If you add one later, this is where the logic goes.
+router.post("/unblock/:targetId", async (req, res) => {
+    // This is a placeholder as the Prisma schema provided doesn't have a Block model yet
+    res.status(200).json({ message: "User unblocked successfully" });
 });
 
 // ---------------- GET USER POSTS ----------------

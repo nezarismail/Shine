@@ -37,11 +37,12 @@ model User {
   image         String?
   description   String?
   isAuthorized  Boolean   @default(false)
-  isSupporter   Boolean   @default(false) // <--- NEW: Tracks donation status
+  isSupporter   Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   roleLevel     String    @default("Starter")
 
+  // Content Relations
   posts         Post[]
   articles      Article[]
   comments      Comment[]
@@ -52,21 +53,38 @@ model User {
   views         PostView[]
   media         Media[]
   notifications Notification[]
-  donations     Donation[]     // <--- NEW: Relation to donation history
+  donations     Donation[]
 
+  // Community Relations
   createdCommunities Community[]       @relation("Creator")
   memberships        CommunityMember[]
 
-  following Follows[] @relation("follower")
-  followers Follows[] @relation("following")
+  // Social Relations
+  following     Follows[] @relation("follower")
+  followers     Follows[] @relation("following")
+  
+  // Blocking Relations
+  blockedUsers  Block[]   @relation("blocker")
+  blockedBy     Block[]   @relation("blocked")
 
+  // Messaging Relations
   sentMessages     Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
 
+  // Interactive Relations
   votedPolls PollOption[]
 }
 
-// NEW MODEL: Tracks specific payment details
+model Block {
+  id        String @id @default(uuid())
+  blockerId String
+  blocker   User   @relation("blocker", fields: [blockerId], references: [id])
+  blockedId String
+  blocked   User   @relation("blocked", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
+}
+
 model Donation {
   id              String   @id @default(uuid())
   amount          Float
@@ -103,12 +121,12 @@ model Post {
   critiques  Post[]   @relation("CritiqueHistory")
 
   pollOptions PollOption[]
-  likes        Like[]
-  comments     Comment[]
-  shares       Share[]
-  saves        Save[]
-  flags        Flag[]
-  views        PostView[]
+  likes       Like[]
+  comments    Comment[]
+  shares      Share[]
+  saves       Save[]
+  flags       Flag[]
+  views       PostView[]
 
   @@index([authorId])
   @@index([communityId])

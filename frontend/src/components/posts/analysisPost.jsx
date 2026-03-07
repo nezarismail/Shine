@@ -31,13 +31,11 @@ function ImageMaximizer({ images, currentIndex, onClose, onPrev, onNext }) {
       display: "flex", alignItems: "center", justifyContent: "center", zIndex: 3000
     }} onClick={onClose}>
       
-      {/* Close Button */}
       <button onClick={onClose} style={{
         position: "absolute", top: 30, right: 30, background: "none", border: "none",
         color: "white", fontSize: 40, cursor: "pointer", zIndex: 3001
       }}>&times;</button>
 
-      {/* Navigation Arrows */}
       {images.length > 1 && (
         <>
           <button onClick={(e) => { e.stopPropagation(); onPrev(); }} style={arrowStyle({ left: 30 })}>&#10094;</button>
@@ -45,7 +43,6 @@ function ImageMaximizer({ images, currentIndex, onClose, onPrev, onNext }) {
         </>
       )}
 
-      {/* The Media (Supports Images & GIFs) */}
       <img 
         src={images[currentIndex]} 
         alt="Maximized view" 
@@ -53,7 +50,6 @@ function ImageMaximizer({ images, currentIndex, onClose, onPrev, onNext }) {
         onClick={(e) => e.stopPropagation()} 
       />
 
-      {/* Image Count Indicator */}
       <div style={{ position: "absolute", bottom: 40, color: "white", background: "rgba(0,0,0,0.5)", padding: "5px 15px", borderRadius: 20, fontSize: 14 }}>
         {currentIndex + 1} / {images.length}
       </div>
@@ -136,8 +132,8 @@ export default function AnalysisPost({ postId, initialData }) {
   const [toast, setToast] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [hasViewed, setHasViewed] = useState(false);
   
-  // Maximizer State
   const [maximizedIndex, setMaximizedIndex] = useState(null);
 
   const showToast = (message, type = "success") => setToast({ message, type });
@@ -150,32 +146,43 @@ export default function AnalysisPost({ postId, initialData }) {
     return updated - created > 2000;
   };
 
+  // Improved Facebook-style View Logic
   useEffect(() => {
     const currentId = initialData?.id || initialData?._id || postId;
-    if (!currentId) return;
+    if (!currentId || hasViewed) return;
+
+    // Check session storage to see if we already counted this view in this session
+    const sessionKey = `viewed_analysis_${currentId}`;
+    if (sessionStorage.getItem(sessionKey)) {
+      setHasViewed(true);
+      return;
+    }
 
     let timer;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
+          // Post is visible, start 2-second timer
           timer = setTimeout(() => {
-            recordView(currentId);
+            recordView(currentId, sessionKey);
           }, 2000); 
         } else {
+          // User scrolled away before 2 seconds, reset timer
           clearTimeout(timer);
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.5 } // 50% of the post must be on screen
     );
 
     if (postRef.current) observer.observe(postRef.current);
+    
     return () => {
       observer.disconnect();
       clearTimeout(timer);
     };
-  }, [postId, post]);
+  }, [postId, post, hasViewed]);
 
-  const recordView = async (currentId) => {
+  const recordView = async (currentId, sessionKey) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/${currentId}/view`, {
         method: "POST",
@@ -185,6 +192,8 @@ export default function AnalysisPost({ postId, initialData }) {
       if (res.ok) {
         const data = await res.json();
         setPost(prev => ({ ...prev, viewsCount: data.viewsCount }));
+        setHasViewed(true);
+        sessionStorage.setItem(sessionKey, "true");
       }
     } catch (e) { console.error("View tracking error", e); }
   };
@@ -279,9 +288,7 @@ export default function AnalysisPost({ postId, initialData }) {
     ? (post.author.image.startsWith('http') ? post.author.image : `${BACKEND_URL}${post.author.image}`) 
     : profileDefault;
 
-  // Media filter handles both Images and GIFs
   const mediaList = post.media?.filter(m => m.type === "image" || m.url.endsWith('.gif')).map(m => m.url.startsWith('http') ? m.url : `${BACKEND_URL}${m.url}`) || [];
-  
   const community = post.community || getCommunityById(post.communityId);
   const MAX_CHARS = 900;
   const displayText = !expanded && post.text?.length > MAX_CHARS ? post.text.slice(0, MAX_CHARS) + "..." : post.text;
@@ -296,7 +303,6 @@ export default function AnalysisPost({ postId, initialData }) {
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
       {showDeleteModal && <DeleteModal onConfirm={handleDelete} onCancel={() => setShowDeleteModal(false)} />}
       
-      {/* Maximizer Modal */}
       <ImageMaximizer 
         images={mediaList} 
         currentIndex={maximizedIndex} 
@@ -306,7 +312,6 @@ export default function AnalysisPost({ postId, initialData }) {
       />
 
       <PostCard ref={postRef}>
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img 
@@ -340,7 +345,6 @@ export default function AnalysisPost({ postId, initialData }) {
           </div>
         </div>
 
-        {/* Text Content */}
         <div style={{ marginTop: 12, display: "flex", gap: 20 }}>
           <div style={{ flex: 1 }}>
              <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 10 }}>
@@ -382,7 +386,6 @@ export default function AnalysisPost({ postId, initialData }) {
           )}
         </div>
 
-        {/* Footer Actions */}
         {!isEditing && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 15 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -457,7 +460,7 @@ export default function AnalysisPost({ postId, initialData }) {
           </div>
         )}
       </PostCard>
-      {showShare && <SharePopup id={post.id} type="post" onClose={() => setShowShare(false)} />}
+      {showShare && <SharePopup id={post.id || post._id} type="post" onClose={() => setShowShare(false)} />}
     </>
   );
 }

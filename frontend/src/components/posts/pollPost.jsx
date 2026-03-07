@@ -48,6 +48,7 @@ export default function PollPost({ postId, initialData }) {
   const { user } = useContext(AuthContext);
   const postRef = useRef(null);
   
+  // Local track to prevent multiple pings in one component mount
   const hasRecordedView = useRef(false);
 
   const [post, setPost] = useState(initialData || null);
@@ -64,7 +65,6 @@ export default function PollPost({ postId, initialData }) {
   const loggedUserId = user?.id || user?._id;
   const isAuthor = user && (user.id === post?.authorId || user._id === post?.authorId);
 
-  // --- Profile Image Logic ---
   const authorImg = post?.author?.image 
     ? (post.author.image.startsWith('http') ? post.author.image : `${BACKEND_URL}${post.author.image}`) 
     : profileDefault;
@@ -83,6 +83,7 @@ export default function PollPost({ postId, initialData }) {
     } catch (err) { console.error("Fetch error:", err); }
   };
 
+  // Check for previous votes
   useEffect(() => {
     if (pollData && loggedUserId) {
       const votedOption = pollData.find(opt => 
@@ -105,21 +106,31 @@ export default function PollPost({ postId, initialData }) {
     return () => clearInterval(interval);
   }, [currentPostId]);
 
+  // Improved View Logic (Facebook Style)
   useEffect(() => {
     if (!currentPostId || hasRecordedView.current) return;
+
+    // Check session storage so we don't count twice in one tab session
+    const sessionKey = `viewed_poll_${currentPostId}`;
+    if (sessionStorage.getItem(sessionKey)) {
+      hasRecordedView.current = true;
+      return;
+    }
 
     let timer;
     const observer = new IntersectionObserver((entries) => {
         if (entries[0].isIntersecting) {
+          // User is focusing on the poll
           timer = setTimeout(() => {
             if (!hasRecordedView.current) {
-                recordView();
+                recordView(sessionKey);
             }
-          }, 2000); 
+          }, 2000); // 2 second pause required
         } else { 
+          // User scrolled away before 2 seconds
           clearTimeout(timer); 
         }
-      }, { threshold: 0.6 });
+      }, { threshold: 0.6 }); // Must be 60% visible
 
     if (postRef.current) observer.observe(postRef.current);
     
@@ -129,7 +140,7 @@ export default function PollPost({ postId, initialData }) {
     };
   }, [currentPostId]);
 
-  const recordView = async () => {
+  const recordView = async (sessionKey) => {
     if (hasRecordedView.current) return;
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/${currentPostId}/view`, {
@@ -141,6 +152,7 @@ export default function PollPost({ postId, initialData }) {
       if (res.ok) {
         const data = await res.json();
         hasRecordedView.current = true;
+        sessionStorage.setItem(sessionKey, "true");
         setPost(prev => prev ? ({ ...prev, viewsCount: data.viewsCount }) : null);
       }
     } catch (e) { console.error("View tracking error", e); }

@@ -159,32 +159,47 @@ export default function OpinionPost({ postId, initialData }) {
     return updated - created > 2000;
   };
 
+  /**
+   * VIEW LOGIC: Facebook style
+   * 1. Only triggers if post hasn't been "viewed" in this current session.
+   * 2. Requires the user to look at the post for at least 2 seconds.
+   */
   useEffect(() => {
     const currentId = initialData?.id || initialData?._id || postId;
     if (!currentId) return;
+
+    // Check if viewed in this session to prevent spamming the server
+    const sessionKey = `viewed_post_${currentId}`;
+    if (sessionStorage.getItem(sessionKey)) return;
 
     let timer;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
+          // User is looking at the post, start a 2-second timer
           timer = setTimeout(() => {
-            recordView(currentId);
+            recordView(currentId, sessionKey);
           }, 2000); 
         } else {
+          // User scrolled away before 2 seconds, cancel the view
           clearTimeout(timer);
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.5 } // 50% visibility
     );
 
     if (postRef.current) observer.observe(postRef.current);
+    
     return () => {
       observer.disconnect();
       clearTimeout(timer);
     };
   }, [postId, post]);
 
-  const recordView = async (currentId) => {
+  const recordView = async (currentId, sessionKey) => {
+    // Double check session storage just in case of race conditions
+    if (sessionStorage.getItem(sessionKey)) return;
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/${currentId}/view`, {
         method: "POST",
@@ -194,6 +209,8 @@ export default function OpinionPost({ postId, initialData }) {
       if (res.ok) {
         const data = await res.json();
         setPost(prev => ({ ...prev, viewsCount: data.viewsCount }));
+        // Mark as viewed for this session
+        sessionStorage.setItem(sessionKey, "true");
       }
     } catch (e) { console.error("View tracking error", e); }
   };
@@ -293,9 +310,7 @@ export default function OpinionPost({ postId, initialData }) {
     ? (post.author.image.startsWith('http') ? post.author.image : `${BACKEND_URL}${post.author.image}`) 
     : profileDefault;
 
-  // Supports Images, GIFs, and Videos
   const mediaList = post.media?.map(m => m.url.startsWith('http') ? m.url : `${BACKEND_URL}${m.url}`) || [];
-  
   const community = post.community || getCommunityById(post.communityId);
   const MAX_CHARS = 900;
   const displayText = !expanded && post.text?.length > MAX_CHARS ? post.text.slice(0, MAX_CHARS) + "..." : post.text;

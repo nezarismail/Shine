@@ -133,8 +133,8 @@ export default function CritiquePost({ postId, initialData }) {
   const [toast, setToast] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [hasViewed, setHasViewed] = useState(false);
   
-  // Media States
   const [imageIndex, setImageIndex] = useState(0);
   const [maximizedIndex, setMaximizedIndex] = useState(null);
 
@@ -146,7 +146,7 @@ export default function CritiquePost({ postId, initialData }) {
     return new Date(post.updatedAt).getTime() - new Date(post.createdAt).getTime() > 2000;
   };
 
-  const recordView = async (currentId) => {
+  const recordView = async (currentId, sessionKey) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/${currentId}/view`, {
         method: "POST",
@@ -156,19 +156,28 @@ export default function CritiquePost({ postId, initialData }) {
       if (res.ok) {
         const data = await res.json();
         setPost(prev => ({ ...prev, viewsCount: data.viewsCount }));
+        setHasViewed(true);
+        sessionStorage.setItem(sessionKey, "true");
       }
     } catch (e) { console.error("View tracking error", e); }
   };
 
+  // Improved Facebook-style View Logic
   useEffect(() => {
     const currentId = initialData?.id || initialData?._id || postId;
-    if (!currentId) return;
+    if (!currentId || hasViewed) return;
+
+    const sessionKey = `viewed_critique_${currentId}`;
+    if (sessionStorage.getItem(sessionKey)) {
+      setHasViewed(true);
+      return;
+    }
 
     let timer;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          timer = setTimeout(() => recordView(currentId), 2000);
+          timer = setTimeout(() => recordView(currentId, sessionKey), 2000);
         } else {
           clearTimeout(timer);
         }
@@ -181,7 +190,7 @@ export default function CritiquePost({ postId, initialData }) {
       observer.disconnect();
       clearTimeout(timer);
     };
-  }, [postId, post]);
+  }, [postId, post, hasViewed]);
 
   useEffect(() => {
     const currentId = initialData?.id || initialData?._id || postId;
@@ -212,7 +221,6 @@ export default function CritiquePost({ postId, initialData }) {
     fetchDetails();
   }, [postId, user, initialData]);
 
-  // Preview Slideshow Logic
   useEffect(() => {
     const media = post?.media || [];
     if (media.length > 1 && maximizedIndex === null) {
@@ -309,7 +317,6 @@ export default function CritiquePost({ postId, initialData }) {
       />
 
       <PostCard ref={postRef}>
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Link to={`/profile/${post.author?.username}`} style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
@@ -339,7 +346,6 @@ export default function CritiquePost({ postId, initialData }) {
           </div>
         </div>
 
-        {/* Reply Context */}
         {originalPost && (
           <div
             onClick={(e) => { e.stopPropagation(); navigate(`/post/${originalPost.id || originalPost._id}`); }}
@@ -357,7 +363,6 @@ export default function CritiquePost({ postId, initialData }) {
           </div>
         )}
 
-        {/* Content Body */}
         <div style={{ marginTop: 12, display: "flex", gap: 20 }}>
           <div style={{ flex: 1 }}>
              <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 10 }}>
@@ -411,7 +416,6 @@ export default function CritiquePost({ postId, initialData }) {
           )}
         </div>
 
-        {/* Footer Actions */}
         {!isEditing && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 15 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
