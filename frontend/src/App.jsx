@@ -16,6 +16,7 @@ import Events from "./components/Events.jsx";
 import FollowersPage from "./components/FollowersPage.jsx";
 import FollowingPage from "./components/FollowingPage.jsx";
 import FriendsPage from "./components/FriendsPage.jsx";
+import ArticleCreate from "./components/articles/articleCreate.jsx";
 
 // Layout
 import Header from "./components/Header.jsx";
@@ -100,6 +101,7 @@ function AppRoutes() {
         <Route path="/critique-create" element={<CritiqueCreate />} />
         <Route path="/poll-create" element={<PollCreate />} />
         <Route path="/create-community" element={<CommunityForm />} />
+        <Route path="/create-article" element={<ArticleCreate />} />
         
         {/* Utility Routes */}
         <Route path="/invite-people" element={<InvitePeople />} />
