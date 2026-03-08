@@ -23,10 +23,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// ================== ROUTES ==================
+// ================== GENERAL ROUTES ==================
 
 /**
- * GET All Communities (For Feed/Discovery)
+ * GET All Communities
  */
 router.get("/", async (req, res) => {
   try {
@@ -38,38 +38,7 @@ router.get("/", async (req, res) => {
     });
     res.json(communities);
   } catch (err) {
-    console.error("Fetch Communities Error:", err);
     res.status(500).json({ error: "Failed to fetch communities" });
-  }
-});
-
-/**
- * GET Communities by User ID (Required for Profile Page)
- * Path: /api/communities/user/:userId
- */
-router.get("/user/:userId", async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const memberships = await prisma.communityMember.findMany({
-      where: { userId: userId },
-      include: {
-        community: {
-          include: {
-            _count: { select: { communityMembers: true } },
-          },
-        },
-      },
-    });
-
-    const communities = memberships.map((m) => ({
-      ...m.community,
-      memberCount: m.community._count.communityMembers,
-    }));
-
-    res.json(communities);
-  } catch (err) {
-    console.error("Fetch User Communities Error:", err);
-    res.status(500).json({ error: "Failed to fetch user communities" });
   }
 });
 
@@ -82,13 +51,22 @@ router.get("/:id", async (req, res) => {
     const community = await prisma.community.findUnique({
       where: { id },
       include: {
-        _count: { select: { communityMembers: true } },
+        _count: { 
+          select: { 
+            communityMembers: true, 
+            requests: true 
+          } 
+        },
+        communityMembers: {
+          include: { user: { select: { id: true, username: true, image: true } } }
+        }
       },
     });
 
     if (!community) return res.status(404).json({ message: "Community not found" });
     res.json(community);
   } catch (err) {
+    console.error("Fetch Community Error:", err);
     res.status(500).json({ error: "Failed to fetch community" });
   }
 });
@@ -105,10 +83,7 @@ router.post(
   async (req, res) => {
     try {
       const { name, slogan, discription, privacy, adminId } = req.body;
-
-      if (!adminId || adminId === "undefined") {
-        return res.status(400).json({ message: "Valid adminId (userId) is required" });
-      }
+      if (!adminId) return res.status(400).json({ message: "adminId is required" });
 
       const iconPath = req.files?.["icon"] ? `/uploads/${req.files["icon"][0].filename}` : null;
       const bannerPath = req.files?.["banner"] ? `/uploads/${req.files["banner"][0].filename}` : null;
@@ -117,64 +92,112 @@ router.post(
         data: {
           name,
           slogan,
-          discription, // Matches your schema
+          discription,
           icon: iconPath,
           banner: bannerPath,
           status: privacy?.toUpperCase() === "PRIVATE" ? "PRIVATE" : "PUBLIC",
           creatorId: adminId,
           communityMembers: {
-            create: [{ userId: adminId, role: "ADMIN" }],
+            create: [{ userId: adminId, role: "MAIN_ADMIN" }],
           },
         },
       });
 
       res.status(201).json(newCommunity);
     } catch (err) {
-      console.error("CREATE ERROR:", err);
+      console.error(err);
       res.status(500).json({ error: "Failed to create" });
     }
   }
 );
 
 /**
- * GET Membership Status
+ * UPDATE Community General Settings
  */
-router.get("/:id/membership/:userId", async (req, res) => {
+router.put("/:id", upload.fields([{ name: "icon", maxCount: 1 }, { name: "banner", maxCount: 1 }]), async (req, res) => {
   try {
-    const { id, userId } = req.params;
-    const member = await prisma.communityMember.findUnique({
-      where: { userId_communityId: { userId, communityId: id } },
+    const { id } = req.params;
+    const { name, slogan, discription, status } = req.body;
+
+    const updateData = { name, slogan, discription, status };
+    if (req.files?.["icon"]) updateData.icon = `/uploads/${req.files["icon"][0].filename}`;
+    if (req.files?.["banner"]) updateData.banner = `/uploads/${req.files["banner"][0].filename}`;
+
+    const updated = await prisma.community.update({
+      where: { id },
+      data: updateData
     });
-    res.json({ isMember: !!member });
+    res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: "Failed to check membership" });
+    res.status(500).json({ error: "Update failed" });
   }
 });
 
 /**
- * JOIN Community
+ * DELETE Community
  */
-router.post("/:id/join", async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const { userId } = req.body;
+    await prisma.$transaction([
+      prisma.communityMember.deleteMany({ where: { communityId: req.params.id } }),
+      prisma.communityRequest.deleteMany({ where: { communityId: req.params.id } }),
+      prisma.community.delete({ where: { id: req.params.id } })
+    ]);
+    res.json({ message: "Community deleted" });
+  } catch (err) {
+    res.status(500).json({ error: "Deletion failed" });
+  }
+});
 
-    const community = await prisma.community.findUnique({ where: { id } });
-    if (!community) return res.status(404).json({ message: "Community not found" });
+// ================== MEMBERS & ROLES ==================
 
-    if (community.status === "PRIVATE") {
-      return res.status(403).json({ message: "Private community." });
+/**
+ * MANAGE MEMBERS (Promote/Demote/Transfer Main Admin)
+ * Fixed to match frontend route: /:id/members/:targetUserId/role
+ */
+router.put("/:id/members/:targetUserId/role", async (req, res) => {
+  try {
+    const { id, targetUserId } = req.params;
+    const { role } = req.body; 
+
+    if (role === "MAIN_ADMIN") {
+      // Transaction to ensure one owner: demote current, promote target
+      await prisma.$transaction([
+        prisma.communityMember.updateMany({
+          where: { communityId: id, role: "MAIN_ADMIN" },
+          data: { role: "ADMIN" } 
+        }),
+        prisma.communityMember.update({
+          where: { userId_communityId: { userId: targetUserId, communityId: id } },
+          data: { role: "MAIN_ADMIN" }
+        })
+      ]);
+      return res.json({ message: "Ownership transferred successfully" });
     }
 
-    await prisma.communityMember.upsert({
-      where: { userId_communityId: { userId, communityId: id } },
-      update: {},
-      create: { userId, communityId: id },
+    const updated = await prisma.communityMember.update({
+      where: { userId_communityId: { userId: targetUserId, communityId: id } },
+      data: { role }
     });
-
-    res.json({ message: "Joined successfully" });
+    res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: "Failed to join" });
+    console.error("Role Update Error:", err);
+    res.status(500).json({ error: "Role update failed" });
+  }
+});
+
+/**
+ * KICK MEMBER
+ */
+router.delete("/:id/members/:targetUserId", async (req, res) => {
+  try {
+    const { id, targetUserId } = req.params;
+    await prisma.communityMember.delete({
+      where: { userId_communityId: { userId: targetUserId, communityId: id } }
+    });
+    res.json({ message: "Member removed" });
+  } catch (err) {
+    res.status(500).json({ error: "Removal failed" });
   }
 });
 
@@ -185,20 +208,119 @@ router.post("/:id/leave", async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.body;
-
     await prisma.communityMember.delete({
       where: { userId_communityId: { userId, communityId: id } },
     });
-
     res.json({ message: "Left successfully" });
   } catch (err) {
     res.status(500).json({ error: "Failed to leave" });
   }
 });
 
+// ================== JOIN REQUESTS ==================
+
 /**
- * GET Community Posts
+ * JOIN / REQUEST TO JOIN
  */
+router.post("/:id/join", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+
+    const community = await prisma.community.findUnique({ where: { id } });
+    if (!community) return res.status(404).json({ message: "Community not found" });
+
+    const existingMember = await prisma.communityMember.findUnique({
+      where: { userId_communityId: { userId, communityId: id } }
+    });
+    if (existingMember) return res.status(400).json({ message: "Already a member" });
+
+    if (community.status === "PRIVATE") {
+      await prisma.communityRequest.upsert({
+        where: { userId_communityId: { userId, communityId: id } },
+        update: { status: "PENDING" },
+        create: { userId, communityId: id, status: "PENDING" }
+      });
+      return res.json({ message: "Join request sent", status: "PENDING" });
+    }
+
+    const newMember = await prisma.communityMember.create({
+      data: { userId, communityId: id, role: "MEMBER" },
+    });
+
+    res.json({ message: "Joined successfully", status: "MEMBER", member: newMember });
+  } catch (err) {
+    res.status(500).json({ error: "Join error" });
+  }
+});
+
+/**
+ * MANAGE REQUESTS (Accept/Decline)
+ */
+router.post("/:id/requests/:requestId", async (req, res) => {
+  try {
+    const { id, requestId } = req.params;
+    const { action } = req.body;
+
+    const joinReq = await prisma.communityRequest.findUnique({ where: { id: requestId } });
+    if (!joinReq) return res.status(404).json({ message: "Request not found" });
+
+    if (action === "ACCEPT") {
+      await prisma.$transaction([
+        prisma.communityMember.create({
+          data: { userId: joinReq.userId, communityId: id, role: "MEMBER" }
+        }),
+        prisma.communityRequest.delete({ where: { id: requestId } })
+      ]);
+      return res.json({ message: "Accepted" });
+    } else {
+      await prisma.communityRequest.delete({ where: { id: requestId } });
+      return res.json({ message: "Declined" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Request management error" });
+  }
+});
+
+/**
+ * GET PENDING REQUESTS
+ */
+router.get("/:id/requests", async (req, res) => {
+  try {
+    const requests = await prisma.communityRequest.findMany({
+      where: { communityId: req.params.id, status: "PENDING" },
+      include: { user: { select: { id: true, username: true, image: true, name: true } } }
+    });
+    res.json(requests);
+  } catch (err) {
+    res.status(500).json({ error: "Fetch error" });
+  }
+});
+
+// ================== MEMBERSHIP CHECK ==================
+
+router.get("/:id/membership/:userId", async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const member = await prisma.communityMember.findUnique({
+      where: { userId_communityId: { userId, communityId: id } }
+    });
+
+    if (member) return res.json({ isMember: true, role: member.role, status: "ACCEPTED" });
+
+    const request = await prisma.communityRequest.findUnique({
+      where: { userId_communityId: { userId, communityId: id } }
+    });
+
+    if (request) return res.json({ isMember: false, status: request.status });
+    res.json({ isMember: false, status: "NONE" });
+  } catch (err) {
+    res.status(500).json({ error: "Membership check failed" });
+  }
+});
+
+// ================== POSTS ==================
+
 router.get("/:id/posts", async (req, res) => {
   try {
     const { id } = req.params;

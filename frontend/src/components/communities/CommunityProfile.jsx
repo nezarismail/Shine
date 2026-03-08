@@ -10,6 +10,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { SearchContext } from "../../searchContext.jsx";
 import CommunitySidebar from "./CommunitySidebar";
+import CommunitySettings from "./CommunitySettings"; // Imported the settings component
 import OpinionPost from "../posts/opinionPost.jsx";
 import CritiquePost from "../posts/critiquePost.jsx";
 import AnalysisPost from "../posts/analysisPost.jsx";
@@ -27,15 +28,17 @@ export default function CommunityProfile() {
   const currentUserId = localStorage.getItem("userId");
 
   const [community, setCommunity] = useState(null);
-  const [originalData, setOriginalData] = useState(null);
   const [feed, setFeed] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
-  const [error, setError] = useState(null);
 
-  // Edit States
+  // Overlay States
+  const [showSettingsOverlay, setShowSettingsOverlay] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("General");
+
+  // Edit States (Legacy Inline Editing)
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
   const [bannerFile, setBannerFile] = useState(null);
@@ -49,25 +52,20 @@ export default function CommunityProfile() {
     return path.startsWith("http") ? path : `${ASSET_URL}${path}`;
   };
 
+  const fetchCommunity = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/communities/${communityId}`);
+      setCommunity(res.data);
+      setEditData({ ...res.data, description: res.data.discription });
+    } catch (err) {
+      console.error("Fetch Error:", err);
+    }
+  };
+
   useEffect(() => {
     setFeed([]);
     setPage(1);
     setHasMore(true);
-  }, [communityId]);
-
-  useEffect(() => {
-    const fetchCommunity = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/communities/${communityId}`);
-        setCommunity(res.data);
-        setOriginalData(res.data);
-        // Map backend 'discription' to edit state
-        setEditData({ ...res.data, description: res.data.discription });
-      } catch (err) {
-        console.error(err);
-        setCommunity(null);
-      }
-    };
     fetchCommunity();
   }, [communityId]);
 
@@ -86,14 +84,12 @@ export default function CommunityProfile() {
           setFeed((prev) => {
             const existing = new Set(prev.map((p) => p.id));
             const unique = posts.filter((p) => !existing.has(p.id));
-            return [...prev, ...unique].sort(
-              (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-            );
+            return [...prev, ...unique].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           });
           setHasMore(page < pagination.totalPages);
         }
       } catch (err) {
-        setError("Failed to load posts.");
+        console.error("Post Load Error:", err);
       } finally {
         setLoading(false);
       }
@@ -106,7 +102,6 @@ export default function CommunityProfile() {
       const formData = new FormData();
       formData.append("name", editData.name);
       formData.append("slogan", editData.slogan);
-      // Ensure we send back 'discription' to the backend
       formData.append("discription", editData.description);
       if (bannerFile) formData.append("banner", bannerFile);
       if (iconFile) formData.append("icon", iconFile);
@@ -115,15 +110,22 @@ export default function CommunityProfile() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setCommunity(res.data);
-      setOriginalData(res.data);
       setIsEditing(false);
     } catch (err) {
       alert("Error saving community.");
     }
   };
 
-  const isMember = community?.communityMembers?.some((m) => m.userId === currentUserId);
-  const isAdmin = community?.creatorId === currentUserId;
+  // Roles Calculation
+  const roleData = useMemo(() => {
+    if (!community || !currentUserId) return { isMember: false, isAdmin: false, isMainAdmin: false };
+    const memberRecord = community.communityMembers?.find((m) => m.userId === currentUserId);
+    return {
+      isMember: !!memberRecord,
+      isAdmin: memberRecord?.role === "ADMIN" || memberRecord?.role === "MAIN_ADMIN",
+      isMainAdmin: memberRecord?.role === "MAIN_ADMIN",
+    };
+  }, [community, currentUserId]);
 
   const lastPostRef = useCallback((node) => {
     if (loading) return;
@@ -185,6 +187,7 @@ export default function CommunityProfile() {
           <img
             src={getFullUrl(isEditing ? editData.icon : community.icon, "/images/default-avatar.png")}
             className={`community-profile-image ${isPinned ? "small" : ""}`}
+            alt="icon"
           />
           {isEditing && (
             <button className="change-icon-btn" onClick={() => document.getElementById("iconFile").click()}>Change</button>
@@ -221,7 +224,6 @@ export default function CommunityProfile() {
                 onChange={(e) => setEditData({ ...editData, description: e.target.value })} 
               />
             ) : (
-              // Using community.discription to match backend spelling
               community.discription
             )}
           </div>
@@ -237,18 +239,35 @@ export default function CommunityProfile() {
         </main>
 
         <div className="community-sidebar">
-          <CommunitySidebar isMember={isMember} isAdmin={isAdmin} setIsEditing={setIsEditing} />
+          <CommunitySidebar 
+            isMember={roleData.isMember} 
+            isAdmin={roleData.isAdmin} 
+            isMainAdmin={roleData.isMainAdmin}
+            setIsEditing={setIsEditing} 
+            communityName={community.name}
+            onOpenSettings={(tab) => {
+              setSettingsTab(tab);
+              setShowSettingsOverlay(true);
+            }}
+          />
         </div>
       </div>
+
+      {/* Settings Overlay Layer */}
+      {showSettingsOverlay && (
+        <CommunitySettings 
+          community={community} 
+          initialSection={settingsTab}
+          onClose={() => setShowSettingsOverlay(false)}
+          onUpdate={() => {
+            fetchCommunity(); // Refresh community data
+            setShowSettingsOverlay(false);
+          }}
+        />
+      )}
       
       <style>{`
-        .community-description {
-          padding-top: 20px;
-          padding-bottom: 20px;
-          font-size: 15px;
-          color: #333;
-          line-height: 1.5;
-        }
+        .community-description { padding: 20px 0; font-size: 15px; color: #333; line-height: 1.5; }
         .banner-edit-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; }
         .change-img-btn { background: white; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-weight: 600; }
         .edit-save-btn { background: #1C274C; color: #FFC847; border: none; padding: 6px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; }

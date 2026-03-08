@@ -22,25 +22,32 @@ enum CommunityStatus {
 }
 
 enum MemberRole {
+  MAIN_ADMIN
   ADMIN
   MEMBER
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
 }
 
 // ================= MODELS =================
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  username      String    @unique
-  name          String
-  password      String
-  image         String?
-  description   String?
-  isAuthorized  Boolean   @default(false)
-  isSupporter   Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  roleLevel     String    @default("Starter")
+  id           String    @id @default(uuid())
+  email        String    @unique
+  username     String    @unique
+  name         String
+  password     String
+  image        String?
+  description  String?
+  isAuthorized Boolean   @default(false)
+  isSupporter  Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  roleLevel    String    @default("Starter")
 
   // Content Relations
   posts         Post[]
@@ -58,14 +65,15 @@ model User {
   // Community Relations
   createdCommunities Community[]       @relation("Creator")
   memberships        CommunityMember[]
+  joinRequests       CommunityRequest[]
 
   // Social Relations
-  following     Follows[] @relation("follower")
-  followers     Follows[] @relation("following")
+  following Follows[] @relation("follower")
+  followers Follows[] @relation("following")
   
   // Blocking Relations
-  blockedUsers  Block[]   @relation("blocker")
-  blockedBy     Block[]   @relation("blocked")
+  blockedUsers Block[]   @relation("blocker")
+  blockedBy    Block[]   @relation("blocked")
 
   // Messaging Relations
   sentMessages     Message[] @relation("SentMessages")
@@ -172,10 +180,10 @@ model Media {
   createdAt DateTime @default(now())
 
   uploaderId String
-  uploader   User   @relation(fields: [uploaderId], references: [id])
+  uploader   User     @relation(fields: [uploaderId], references: [id])
 
   postId String?
-  post   Post?   @relation(fields: [postId], references: [id])
+  post   Post?    @relation(fields: [postId], references: [id])
 
   articleId String? 
   article   Article? @relation(fields: [articleId], references: [id])
@@ -279,18 +287,19 @@ model Flag {
 }
 
 model Community {
-  id                String            @id @default(uuid())
-  name              String
-  interests         String[]          @default([])
-  slogan            String?
-  discription       String?
-  icon              String?
-  banner            String?
-  status            CommunityStatus   @default(PUBLIC)
-  creatorId         String
-  creator           User              @relation("Creator", fields: [creatorId], references: [id])
-  posts             Post[]
+  id               String            @id @default(uuid())
+  name             String
+  interests        String[]          @default([])
+  slogan           String?
+  discription      String?
+  icon             String?
+  banner           String?
+  status           CommunityStatus   @default(PUBLIC)
+  creatorId        String
+  creator          User              @relation("Creator", fields: [creatorId], references: [id])
+  posts            Post[]
   communityMembers CommunityMember[]
+  requests         CommunityRequest[]
 }
 
 model CommunityMember {
@@ -301,6 +310,18 @@ model CommunityMember {
   community   Community  @relation(fields: [communityId], references: [id])
   role        MemberRole @default(MEMBER)
   joinedAt    DateTime   @default(now())
+
+  @@unique([userId, communityId])
+}
+
+model CommunityRequest {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  communityId String
+  community   Community     @relation(fields: [communityId], references: [id])
+  status      RequestStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
 
   @@unique([userId, communityId])
 }
@@ -316,10 +337,10 @@ model Follows {
 }
 
 model Message {
-  id          String @id @default(uuid())
-  text        String
-  senderId    String
-  sender      User   @relation("SentMessages", fields: [senderId], references: [id])
+  id         String @id @default(uuid())
+  text       String
+  senderId   String
+  sender     User   @relation("SentMessages", fields: [senderId], references: [id])
   receiverId String
   receiver   User   @relation("ReceivedMessages", fields: [receiverId], references: [id])
   createdAt  DateTime @default(now())
