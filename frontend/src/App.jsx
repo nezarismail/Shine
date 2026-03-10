@@ -37,6 +37,7 @@ import InvitePeople from "./components/InvitePeople.jsx";
 import Compost from "./components/Compost.jsx";
 import ArticleApply from "./components/ArticleApply.jsx";
 import Donate from "./components/Donate.jsx";
+import Messenger from "./components/Messenger.jsx";
 
 // Auth & Profile
 import ProfilePageWrapper from "./components/ProfilePageWrapper.jsx";
@@ -102,6 +103,7 @@ function AppRoutes() {
         <Route path="/poll-create" element={<PollCreate />} />
         <Route path="/create-community" element={<CommunityForm />} />
         <Route path="/create-article" element={<ArticleCreate />} />
+        <Route path="/messenger" element={<Messenger />} />
         
         {/* Utility Routes */}
         <Route path="/invite-people" element={<InvitePeople />} />

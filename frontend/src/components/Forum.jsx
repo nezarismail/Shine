@@ -10,8 +10,10 @@ import "../styles/Forum.css";
 export default function Forum() {
   const { postId } = useParams();
   const navigate = useNavigate();
+
   const [selectedPostId, setSelectedPostId] = useState(postId || null);
   const [feed, setFeed] = useState([]);
+
   const scrollPosRef = useRef(0);
 
   useEffect(() => {
@@ -28,10 +30,11 @@ export default function Forum() {
   const handleBack = () => {
     setSelectedPostId(null);
     navigate("/forum");
+
     setTimeout(() => {
       window.scrollTo({
         top: scrollPosRef.current,
-        behavior: "instant"
+        behavior: "instant",
       });
     }, 0);
   };
@@ -39,6 +42,7 @@ export default function Forum() {
   return (
     <div className="forum-page">
       <Header />
+
       <div className="forum-container">
         <aside className="left-column">
           <LeftSidebar />
@@ -48,11 +52,13 @@ export default function Forum() {
           {selectedPostId ? (
             <PostView postId={selectedPostId} goBack={handleBack} />
           ) : (
-            <Feed
-              onSelectPost={handleSelectPost}
-              feed={feed}
-              setFeed={setFeed}
-            />
+            <div className="feed-scroll">
+              <Feed
+                onSelectPost={handleSelectPost}
+                feed={feed}
+                setFeed={setFeed}
+              />
+            </div>
           )}
         </main>
 

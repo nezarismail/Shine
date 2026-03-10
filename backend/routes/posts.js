@@ -224,7 +224,14 @@ router.put("/:id", async (req, res) => {
 // ================== DELETE POST ==================
 router.delete("/:id", async (req, res) => {
   try {
-    await prisma.post.delete({ where: { id: req.params.id } });
+    const { id } = req.params;
+
+    // 1. Delete poll options associated with this post (if any)
+    await prisma.pollOption.deleteMany({ where: { postId: id } });
+
+    // 2. Delete the post itself
+    await prisma.post.delete({ where: { id: id } });
+
     res.json({ message: "Post deleted successfully" });
   } catch (err) {
     console.error("Delete error:", err);

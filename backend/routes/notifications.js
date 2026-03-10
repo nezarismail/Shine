@@ -1,37 +1,40 @@
-const express = require("express");
-const prisma = require("../prisma");
+const express = require('express');
 const router = express.Router();
+const prisma = require("../prisma");
 
-// Get notifications for user
-router.get("/:userId", async (req, res) => {
-  const { userId } = req.params;
-
+// Fetch all notifications for the user
+router.get('/', async (req, res) => {
   try {
     const notifications = await prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 50,
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 20
     });
     res.json(notifications);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch notifications" });
+    res.status(500).json({ error: "Failed to load notifications." });
   }
 });
 
-// Mark as read
-router.post("/:userId/read/:notificationId", async (req, res) => {
-  const { notificationId } = req.params;
+// Mark all as read
+router.put('/read-all', async (req, res) => {
   try {
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: { isRead: true },
+    await prisma.notification.updateMany({
+      where: { userId: req.user.id, isRead: false },
+      data: { isRead: true }
     });
-    res.json({ message: "Marked as read" });
+    res.sendStatus(200);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to mark notification" });
+    res.status(500).json({ error: "Update failed." });
   }
 });
+
+// Utility to create a notification (Call this when someone follows, likes, etc.)
+const createNotification = async (userId, type, content, link = null) => {
+  return await prisma.notification.create({
+    data: { userId, type, content, link }
+  });
+};
 
 module.exports = router;
+module.exports.createNotification = createNotification;

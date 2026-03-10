@@ -1,6 +1,7 @@
 // ================== DATASOURCE ==================
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ================== GENERATOR ==================
@@ -76,8 +77,8 @@ model User {
   blockedBy    Block[]   @relation("blocked")
 
   // Messaging Relations
-  sentMessages     Message[] @relation("SentMessages")
-  receivedMessages Message[] @relation("ReceivedMessages")
+  sentMessages  Message[]
+  conversations ConversationMember[]
 
   // Interactive Relations
   votedPolls PollOption[]
@@ -288,19 +289,19 @@ model Flag {
 }
 
 model Community {
-  id               String            @id @default(uuid())
-  name             String
-  interests        String[]          @default([])
-  slogan           String?
-  discription      String?
-  icon             String?
-  banner           String?
-  status           CommunityStatus   @default(PUBLIC)
-  creatorId        String
-  creator          User              @relation("Creator", fields: [creatorId], references: [id])
-  posts            Post[]
-  communityMembers CommunityMember[]
-  requests         CommunityRequest[]
+  id                String            @id @default(uuid())
+  name              String
+  interests         String[]          @default([])
+  slogan            String?
+  discription       String?
+  icon              String?
+  banner            String?
+  status            CommunityStatus   @default(PUBLIC)
+  creatorId         String
+  creator           User              @relation("Creator", fields: [creatorId], references: [id])
+  posts             Post[]
+  communityMembers  CommunityMember[]
+  requests          CommunityRequest[]
 }
 
 model CommunityMember {
@@ -337,14 +338,46 @@ model Follows {
   @@unique([followerId, followingId])
 }
 
+// ================= MESSAGING LOGIC =================
+
+model Conversation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt 
+
+  isGroup   Boolean  @default(false)
+  name      String?  
+  
+  messages  Message[]
+  members   ConversationMember[]
+
+  @@index([updatedAt])
+}
+
+model ConversationMember {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  lastReadAt     DateTime     @default(now()) 
+
+  @@unique([userId, conversationId])
+}
+
 model Message {
-  id         String @id @default(uuid())
-  text       String
-  senderId   String
-  sender     User   @relation("SentMessages", fields: [senderId], references: [id])
-  receiverId String
-  receiver   User   @relation("ReceivedMessages", fields: [receiverId], references: [id])
-  createdAt  DateTime @default(now())
+  id             String       @id @default(uuid())
+  text           String
+  createdAt      DateTime     @default(now())
+  
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id])
+  
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
 }
 
 model Notification {

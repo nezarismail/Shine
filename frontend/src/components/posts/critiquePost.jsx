@@ -162,7 +162,6 @@ export default function CritiquePost({ postId, initialData }) {
     } catch (e) { console.error("View tracking error", e); }
   };
 
-  // Improved Facebook-style View Logic
   useEffect(() => {
     const currentId = initialData?.id || initialData?._id || postId;
     if (!currentId || hasViewed) return;
@@ -323,7 +322,11 @@ export default function CritiquePost({ postId, initialData }) {
               <img src={authorImage} alt="" style={{ width: 41, height: 41, borderRadius: 999, objectFit: "cover" }} />
               <div>
                 <div style={{ fontSize: 16, fontWeight: 400, color: "#1C274C" }}>{post.author?.name || "User"}</div>
-                {community?.name && <div style={{ fontSize: 12, color: "#6b7280" }}>from <span style={{ fontWeight: "bold", color: "#1C274C" }}>{community.name}</span></div>}
+                {community?.name && (
+                  <div style={{ fontSize: 12, color: "#6b7280" }}>
+                    from <Link to={`/community/${community.id || community._id}`} style={{ textDecoration: "none", fontWeight: "bold", color: "#1C274C" }}>{community.name}</Link>
+                  </div>
+                )}
               </div>
             </Link>
 

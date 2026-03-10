@@ -7,14 +7,25 @@ const { Server } = require("socket.io");
 const redis = require("redis");
 const prisma = require("./prisma.js");
 
+// 1. IMPORT ALL ROUTES AT THE TOP
+const paymentRoutes = require('./routes/payment');
+const authRoutes = require("./routes/auth.routes.js");
+const userRoutes = require("./routes/users.js");
+const followRoutes = require("./routes/follow");
+const eventRoutes = require("./routes/events");
+const uploadRoutes = require("./routes/upload");
+const postRoutes = require("./routes/posts");
+const communityRoutes = require("./routes/communities");
+const articleRoutes = require("./routes/articles");
+const commentRoutes = require("./routes/comments");
+const messengerRoutes = require('./routes/messenger'); // Imported here
+const notificationRoutes = require('./routes/notifications');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
 // ================= STRIPE WEBHOOK (MUST BE BEFORE express.json) =================
-// We import and use payment routes here so the webhook can use express.raw() 
-// before express.json() globally parses the body.
-const paymentRoutes = require('./routes/payment');
 app.use('/api', paymentRoutes);
 
 // ================= GLOBAL MIDDLEWARE =================
@@ -30,7 +41,6 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      // Allows the specific origins or any GitHub Codespaces preview URL
       if (allowedOrigins.includes(origin) || origin.endsWith("app.github.dev")) {
         return callback(null, true);
       }
@@ -80,17 +90,17 @@ app.use((req, res, next) => {
 });
 
 // ================= ROUTES =================
-app.use("/api/users", require("./routes/auth.routes.js"));
-app.use("/api/users", require("./routes/users.js"));
-
-// Feature routes
-app.use("/api/follow", require("./routes/follow"));
-app.use("/api/events", require("./routes/events"));
-app.use("/api/upload", require("./routes/upload"));
-app.use("/api/posts", require("./routes/posts"));
-app.use("/api/communities", require("./routes/communities"));
-app.use("/api/articles", require("./routes/articles"));
-app.use("/api", require("./routes/comments")); 
+app.use("/api/users", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/follow", followRoutes);
+app.use("/api/events", eventRoutes);
+app.use("/api/upload", uploadRoutes);
+app.use("/api/posts", postRoutes);
+app.use("/api/communities", communityRoutes);
+app.use("/api/articles", articleRoutes);
+app.use("/api", commentRoutes); 
+app.use('/api/messenger', messengerRoutes); // Variable is now defined
+app.use('/api/notifications', notificationRoutes);
 
 // ================= HEALTH & START =================
 app.get("/health", async (req, res) => {
@@ -103,6 +113,12 @@ app.get("/health", async (req, res) => {
 });
 
 app.get("/", (req, res) => res.send("Server is running!"));
+
+// ================= GLOBAL ERROR HANDLER =================
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Something went wrong on the server!" });
+});
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

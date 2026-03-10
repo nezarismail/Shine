@@ -47,8 +47,6 @@ export default function PollPost({ postId, initialData }) {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   const postRef = useRef(null);
-  
-  // Local track to prevent multiple pings in one component mount
   const hasRecordedView = useRef(false);
 
   const [post, setPost] = useState(initialData || null);
@@ -61,9 +59,9 @@ export default function PollPost({ postId, initialData }) {
   const [isSaved, setIsSaved] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const currentPostId = initialData?.id || initialData?._id || postId;
+  const currentPostId = post?.id || post?._id || postId;
   const loggedUserId = user?.id || user?._id;
-  const isAuthor = user && (user.id === post?.authorId || user._id === post?.authorId);
+  const isAuthor = user && (String(user.id || user._id) === String(post?.authorId));
 
   const authorImg = post?.author?.image 
     ? (post.author.image.startsWith('http') ? post.author.image : `${BACKEND_URL}${post.author.image}`) 
@@ -83,7 +81,22 @@ export default function PollPost({ postId, initialData }) {
     } catch (err) { console.error("Fetch error:", err); }
   };
 
-  // Check for previous votes
+  const handleDelete = async () => {
+    const cid = post.id || post._id;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/posts/${cid}`, { method: "DELETE" });
+      if (res.ok) {
+        showToastFn("Post deleted");
+        setShowDeleteModal(false);
+        setPost(null); 
+        setTimeout(() => window.location.reload(), 800);
+      }
+    } catch (err) { 
+        showToastFn("Delete failed", "error"); 
+    }
+  };
+
+  // Vote Checking
   useEffect(() => {
     if (pollData && loggedUserId) {
       const votedOption = pollData.find(opt => 
@@ -92,7 +105,6 @@ export default function PollPost({ postId, initialData }) {
           return String(vId) === String(loggedUserId);
         })
       );
-      
       if (votedOption) {
         setSelectedOption(votedOption.id);
         setShowResults(true);
@@ -106,108 +118,57 @@ export default function PollPost({ postId, initialData }) {
     return () => clearInterval(interval);
   }, [currentPostId]);
 
-  // Improved View Logic (Facebook Style)
+  // View recording logic
   useEffect(() => {
     if (!currentPostId || hasRecordedView.current) return;
-
-    // Check session storage so we don't count twice in one tab session
     const sessionKey = `viewed_poll_${currentPostId}`;
     if (sessionStorage.getItem(sessionKey)) {
       hasRecordedView.current = true;
       return;
     }
-
     let timer;
     const observer = new IntersectionObserver((entries) => {
         if (entries[0].isIntersecting) {
-          // User is focusing on the poll
           timer = setTimeout(() => {
-            if (!hasRecordedView.current) {
-                recordView(sessionKey);
-            }
-          }, 2000); // 2 second pause required
-        } else { 
-          // User scrolled away before 2 seconds
-          clearTimeout(timer); 
-        }
-      }, { threshold: 0.6 }); // Must be 60% visible
-
+            if (!hasRecordedView.current) recordView(sessionKey);
+          }, 2000);
+        } else { clearTimeout(timer); }
+      }, { threshold: 0.6 });
     if (postRef.current) observer.observe(postRef.current);
-    
-    return () => { 
-      observer.disconnect(); 
-      clearTimeout(timer); 
-    };
+    return () => { observer.disconnect(); clearTimeout(timer); };
   }, [currentPostId]);
 
   const recordView = async (sessionKey) => {
-    if (hasRecordedView.current) return;
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/${currentPostId}/view`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: loggedUserId || "anonymous" })
       });
-      
       if (res.ok) {
         const data = await res.json();
         hasRecordedView.current = true;
         sessionStorage.setItem(sessionKey, "true");
         setPost(prev => prev ? ({ ...prev, viewsCount: data.viewsCount }) : null);
       }
-    } catch (e) { console.error("View tracking error", e); }
-  };
-
-  const handleDelete = async (e) => {
-    if(e) e.stopPropagation();
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/posts/${currentPostId}`, { method: "DELETE" });
-      if (res.ok) {
-        showToastFn("Post deleted");
-        setShowDeleteModal(false);
-        setPost(null);
-        setTimeout(() => navigate("/"), 500);
-      }
-    } catch (err) { showToastFn("Delete failed", "error"); }
+    } catch (e) { console.error(e); }
   };
 
   const handleVote = async (e, optionId) => {
     e.stopPropagation(); 
     if (!loggedUserId) return showToastFn("Please login to vote", "error");
     if (selectedOption) return; 
-    
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/${currentPostId}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: loggedUserId, optionId }),
       });
-
       if (res.ok) {
         await fetchPostData();
         showToastFn("Vote recorded!");
-      } else {
-        const errData = await res.json();
-        showToastFn(errData.error || "Vote failed", "error");
-        fetchPostData();
       }
     } catch (err) { showToastFn("Error voting", "error"); }
-  };
-
-  const handleShareClick = async (e) => {
-    e.stopPropagation();
-    setShowShare(true);
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/posts/${currentPostId}/share`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: loggedUserId }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPost(prev => ({ ...prev, sharesCount: data.sharesCount }));
-      }
-    } catch (err) { console.error("Share failed", err); }
   };
 
   const toggleSave = async (e) => {
@@ -231,90 +192,69 @@ export default function PollPost({ postId, initialData }) {
 
   const totalVotes = pollData.reduce((sum, o) => sum + (o._count?.votedUsers || 0), 0);
   const community = post.community || getCommunityById(post.communityId);
-  const viewsDisplay = post.viewsCount ?? 0;
 
   return (
     <>
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
-      {showDeleteModal && <DeleteModal onConfirm={handleDelete} onCancel={(e) => { e.stopPropagation(); setShowDeleteModal(false); }} />}
+      {showDeleteModal && <DeleteModal onConfirm={handleDelete} onCancel={() => setShowDeleteModal(false)} />}
 
       <div ref={postRef} onClick={() => navigate(`/post/${currentPostId}`)}
         style={{ width: "100%", background: "#fff", borderRadius: 18, border: "0.5px solid #1C274C", padding: 18, display: "flex", flexDirection: "column", gap: 12, cursor: "pointer", position: "relative" }}>
         
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <img 
-              src={authorImg} 
-              onClick={(e) => { e.stopPropagation(); navigate(`/profile/${post.author?.username}`); }}
-              style={{ width: 41, height: 41, borderRadius: 999, objectFit: "cover", cursor: "pointer" }} 
-              alt="Profile" 
-            />
+            <img src={authorImg} onClick={(e) => { e.stopPropagation(); navigate(`/profile/${post.author?.username}`); }}
+              style={{ width: 41, height: 41, borderRadius: 999, objectFit: "cover", cursor: "pointer" }} alt="" />
             <div>
-              <div onClick={(e) => { e.stopPropagation(); navigate(`/profile/${post.author?.username}`); }}
-                style={{ fontSize: 16, fontWeight: 400, color: "#1C274C", cursor: "pointer" }}>{post.author?.name || "User"}</div>
-              {community?.name && (
-                <div style={{ fontSize: 12, color: "#6b7280" }}>from <span onClick={(e) => { e.stopPropagation(); navigate(`/community/${post.communityId}`); }}
-                  style={{ color: "#1C274C", fontWeight: "bold", cursor: "pointer" }}>{community.name}</span></div>
-              )}
+              <div style={{ fontSize: 16, fontWeight: 400, color: "#1C274C" }}>{post.author?.name || "User"}</div>
+              {community?.name && <div style={{ fontSize: 12, color: "#6b7280" }}>from <span style={{ color: "#1C274C", fontWeight: "bold" }}>{community.name}</span></div>}
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: "#1C274C" }}>{viewsDisplay} views</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: "#1C274C" }}>{post.viewsCount || 0} views</div>
             <div style={{ fontSize: 14, fontWeight: 500, color: "#1C274C" }}>{totalVotes} voted</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: "#FFC847", textTransform: "lowercase" }}>poll</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#FFC847" }}>poll</div>
           </div>
         </div>
 
-        <div style={{ fontSize: 16, color: "#000", lineHeight: 1.5, fontWeight: 500 }}>{post.text}</div>
+        <div style={{ fontSize: 16, color: "#000", fontWeight: 500 }}>{post.text}</div>
 
-        {/* Poll Options */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {pollData.map((option) => {
             const currentOptionVotes = option._count?.votedUsers || 0;
             const percentage = totalVotes ? Math.round((currentOptionVotes / totalVotes) * 100) : 0;
             const isSelected = selectedOption === option.id;
-            
             return (
               <div key={option.id} onClick={(e) => handleVote(e, option.id)}
                 style={{
                   background: "#F6F6F6", borderRadius: 10, padding: "14px",
                   cursor: selectedOption ? "default" : "pointer",
                   border: isSelected ? "2px solid #FFC847" : "1px solid #D8DDE6",
-                  position: "relative", overflow: "hidden", transition: "all 0.2s ease"
+                  position: "relative", overflow: "hidden"
                 }}>
                 {showResults && (
                   <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${percentage}%`, 
-                    background: isSelected ? "rgba(255,200,71,0.3)" : "rgba(28, 39, 76, 0.08)", 
-                    zIndex: 0, transition: "width 1s cubic-bezier(0.4, 0, 0.2, 1)" }} />
+                    background: isSelected ? "rgba(255,200,71,0.3)" : "rgba(28, 39, 76, 0.08)", zIndex: 0 }} />
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
-                  <span style={{ fontSize: 15, color: "#1C274C", fontWeight: isSelected ? 700 : 500 }}>
-                    {option.text} {isSelected && " ✓"}
-                  </span>
-                  {showResults && <span style={{ fontSize: 14, fontWeight: 700, color: "#1C274C" }}>{percentage}%</span>}
+                  <span style={{ fontSize: 15, color: "#1C274C", fontWeight: isSelected ? 700 : 500 }}>{option.text} {isSelected && " ✓"}</span>
+                  {showResults && <span style={{ fontSize: 14, fontWeight: 700 }}>{percentage}%</span>}
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Footer */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
           <div style={{ fontSize: 12, color: "#6b7280" }}>{new Date(post.createdAt).toLocaleDateString()}</div>
           <div style={{ display: "flex", gap: 15, alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <img src={ShareIcon} onClick={handleShareClick} style={{ width: 18, cursor: "pointer" }} alt="share" />
-                <span style={{ fontSize: 14, color: "#1C274C", fontWeight: 500 }}>{post.sharesCount || 0}</span>
-              </div>
-              <img src={isSaved ? TagClickedIcon : TagIcon} onClick={toggleSave} style={{ width: 18, cursor: "pointer" }} alt="save" />
-              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                <img src={isAuthor ? MenuIcon : FlagIcon} onClick={(e) => { e.stopPropagation(); isAuthor && setShowMenuPopup(!showMenuPopup); }} 
-                   style={{ width: 18, cursor: "pointer" }} alt="action" />
+              <img src={ShareIcon} onClick={(e) => { e.stopPropagation(); setShowShare(true); }} style={{ width: 18, cursor: "pointer" }} alt="" />
+              <img src={isSaved ? TagClickedIcon : TagIcon} onClick={toggleSave} style={{ width: 18, cursor: "pointer" }} alt="" />
+              <div style={{ position: "relative" }}>
+                <img src={isAuthor ? MenuIcon : FlagIcon} onClick={(e) => { e.stopPropagation(); isAuthor && setShowMenuPopup(!showMenuPopup); }} style={{ width: 18, cursor: "pointer" }} alt="" />
                 {showMenuPopup && isAuthor && (
-                  <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: "100%", right: 0, background: "white", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", borderRadius: 8, padding: 6, width: 120, zIndex: 10 }}>
-                    <div onClick={(e) => { e.stopPropagation(); setShowDeleteModal(true); setShowMenuPopup(false); }} 
-                      style={{ padding: "8px", cursor: "pointer", fontSize: 13, color: "#FF4C4C", fontWeight: 600 }}>Delete Post</div>
+                  <div style={{ position: "absolute", bottom: "100%", right: 0, background: "white", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", borderRadius: 8, padding: 6, width: 120, zIndex: 10 }}>
+                    <div onClick={(e) => { e.stopPropagation(); setShowDeleteModal(true); setShowMenuPopup(false); }} style={{ padding: "8px", cursor: "pointer", fontSize: 13, color: "#FF4C4C", fontWeight: 600 }}>Delete Post</div>
                   </div>
                 )}
               </div>

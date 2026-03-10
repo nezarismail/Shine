@@ -1,49 +1,48 @@
 .forum-page {
-  background-color: #f7f9fc;
+  width: 100%;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  overflow-y: auto;
 }
 
-/* Main flexible container */
+/* GRID LAYOUT */
+
 .forum-container {
-  display: grid;
-  grid-template-columns: 1fr 2.78fr 1fr; 
-  column-gap: 20px;
-  justify-content: center;
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 20px 24px; 
-  flex: 1;
-  align-items: start; /* Essential: allows sidebars to stay at their natural height */
+
+  display: grid;
+  grid-template-columns: 300px 1fr 300px;
+  gap: 20px;
+
+  align-items: stretch; /* IMPORTANT */
 }
 
-/* SIDEBARS: Relative Sticky Logic */
+/* CENTER COLUMN */
+
+.center-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* FEED SCROLL CONTAINER */
+
+.feed-scroll {
+  flex: 1;
+  overflow-y: auto;
+
+  /* hide scrollbar */
+  scrollbar-width: none;
+}
+
+.feed-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* SIDEBARS */
+
 .left-column,
 .right-column {
-  position: sticky;
-  top: 20px; /* This is the distance from the top of the screen when scrolling */
-  /* Remove overflow-y and max-height to stop the 'separate scroll' */
-  overflow: visible; 
-  height: auto; 
-}
-
-/* CENTER FEED */
-.center-column {
-  background-color: #F6F8FC;
-  border-radius: 10px;
-  min-height: 100vh;
-  overflow: visible; /* Page handles the scrolling */
-}
-
-/* Responsive */
-@media (max-width: 1216px) {
-  .forum-container {
-    grid-template-columns: 1fr;
-    padding-top: 10px;
-  }
-  .left-column, .right-column {
-    position: static;
-  }
+  position: relative;
 }

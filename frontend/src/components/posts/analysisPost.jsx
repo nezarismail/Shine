@@ -133,7 +133,6 @@ export default function AnalysisPost({ postId, initialData }) {
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [hasViewed, setHasViewed] = useState(false);
-  
   const [maximizedIndex, setMaximizedIndex] = useState(null);
 
   const showToast = (message, type = "success") => setToast({ message, type });
@@ -151,7 +150,6 @@ export default function AnalysisPost({ postId, initialData }) {
     const currentId = initialData?.id || initialData?._id || postId;
     if (!currentId || hasViewed) return;
 
-    // Check session storage to see if we already counted this view in this session
     const sessionKey = `viewed_analysis_${currentId}`;
     if (sessionStorage.getItem(sessionKey)) {
       setHasViewed(true);
@@ -162,16 +160,14 @@ export default function AnalysisPost({ postId, initialData }) {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          // Post is visible, start 2-second timer
           timer = setTimeout(() => {
             recordView(currentId, sessionKey);
           }, 2000); 
         } else {
-          // User scrolled away before 2 seconds, reset timer
           clearTimeout(timer);
         }
       },
-      { threshold: 0.5 } // 50% of the post must be on screen
+      { threshold: 0.5 }
     );
 
     if (postRef.current) observer.observe(postRef.current);
