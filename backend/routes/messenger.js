@@ -1,57 +1,136 @@
 const express = require('express');
 const router = express.Router();
-const messenger = require('../services/messenger.service');
+const prisma = require('../prisma');
+const auth = require('../middleware/auth');
 
-// Get all active conversations for the current user
-router.get('/inbox', async (req, res) => {
+/**
+ * 1. SEND MESSAGE
+ * Updated with better error handling and safety checks
+ */
+router.post('/send', auth, async (req, res) => {
   try {
-    const inbox = await messenger.getInbox(req.user.userId);
-    res.json(inbox);
+    const { receiverId, text, imageUrl } = req.body;
+    const senderId = req.user.id;
+
+    if (!receiverId) return res.status(400).json({ error: "Receiver ID is required" });
+    if (!text && !imageUrl) return res.status(400).json({ error: "Message content cannot be empty" });
+
+    if (receiverId === senderId) {
+      return res.status(400).json({ error: "You cannot message yourself." });
+    }
+
+    // Check Friendship (Mutual Follow)
+    const followsSender = await prisma.follows.findFirst({
+      where: { followerId: receiverId, followingId: senderId }
+    });
+    const followsReceiver = await prisma.follows.findFirst({
+      where: { followerId: senderId, followingId: receiverId }
+    });
+
+    const isFriends = !!(followsSender && followsReceiver);
+
+    // Restriction Logic
+    if (!isFriends) {
+      const existingChat = await prisma.message.findFirst({
+        where: { senderId, receiverId }
+      });
+
+      if (existingChat) {
+        return res.status(403).json({ 
+          error: "Message pending. You can send more once they follow you back." 
+        });
+      }
+    }
+
+    const message = await prisma.message.create({
+      data: { senderId, receiverId, text, imageUrl },
+      include: { sender: { select: { username: true, image: true } } }
+    });
+
+    // Notify safely - don't let notification failure crash the message send
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: receiverId,
+          type: "MESSAGE",
+          content: `${message.sender.username} sent you a message.`,
+          link: `/messenger`
+        }
+      });
+    } catch (e) { console.error("Notification log only:", e.message); }
+
+    res.status(201).json(message);
   } catch (err) {
-    res.status(500).json({ error: "Failed to load inbox" });
+    console.error("Messenger Send Error:", err);
+    res.status(500).json({ error: "Server error while sending message" });
   }
 });
 
-// Search for NEW users to chat with
-router.get('/search', async (req, res) => {
+/**
+ * 2. GET CONVERSATIONS
+ */
+router.get('/conversations', auth, async (req, res) => {
   try {
-    const query = req.query.q;
-    const users = await messenger.searchUsers(query, req.user.userId);
-    res.json(users);
+    const userId = req.user.id;
+    const messages = await prisma.message.findMany({
+      where: {
+        OR: [{ senderId: userId }, { receiverId: userId }],
+        NOT: { deletedBy: { has: userId } }
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        sender: { select: { id: true, name: true, username: true, image: true } },
+        receiver: { select: { id: true, name: true, username: true, image: true } }
+      }
+    });
+
+    const chatPartners = new Map();
+    messages.forEach(msg => {
+      const partner = msg.senderId === userId ? msg.receiver : msg.sender;
+      if (partner && !chatPartners.has(partner.id)) {
+        chatPartners.set(partner.id, {
+          user: partner,
+          lastMessage: msg.text || "Image",
+          lastMessageDate: msg.createdAt,
+          isRead: msg.receiverId === userId ? msg.isRead : true
+        });
+      }
+    });
+
+    res.json(Array.from(chatPartners.values()));
   } catch (err) {
-    res.status(500).json({ error: "Search failed" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Start a new chat or get an existing one
-router.post('/chat', async (req, res) => {
+/**
+ * 3. GET CHAT HISTORY
+ */
+router.get('/history/:partnerId', auth, async (req, res) => {
   try {
-    const { targetId } = req.body;
-    const chat = await messenger.getOrCreateConversation(req.user.userId, targetId);
-    res.json(chat);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
+    const userId = req.user.id;
+    const { partnerId } = req.params;
 
-// Get messages for a specific conversation
-router.get('/messages/:id', async (req, res) => {
-  try {
-    const messages = await messenger.getChatHistory(req.params.id);
-    res.json(messages);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to load messages" });
-  }
-});
+    const history = await prisma.message.findMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: partnerId },
+          { senderId: partnerId, receiverId: userId }
+        ],
+        NOT: { deletedBy: { has: userId } }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
 
-// Send a message
-router.post('/send', async (req, res) => {
-  try {
-    const { conversationId, text } = req.body;
-    const message = await messenger.sendMessage(req.user.userId, conversationId, text);
-    res.json(message);
+    // Mark as read
+    await prisma.message.updateMany({
+      where: { senderId: partnerId, receiverId: userId, isRead: false },
+      data: { isRead: true }
+    });
+
+    res.json(history);
   } catch (err) {
-    res.status(500).json({ error: "Failed to send" });
+    res.status(500).json({ error: err.message });
   }
 });
 

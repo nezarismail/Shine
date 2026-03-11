@@ -1,13 +1,12 @@
-import React from "react";
+import React, { useContext } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 // Providers
-import { AuthProvider } from "./components/AuthProvider.jsx";
+import { AuthProvider, AuthContext } from "./components/AuthProvider.jsx";
 import { SearchProvider } from "/workspaces/Shine/frontend/src/searchContext.jsx";
 
-// Pages - FIX: Ensure LandingPage points to your actual Home/Landing component, 
-// NOT the searchContext file.
-import LandingPage from "./components/LandingPage.jsx"; // Adjust this path to your real Landing Page
+// Pages
+import LandingPage from "./components/LandingPage.jsx"; 
 import Forum from "./components/Forum.jsx";
 import Communities from "./components/Communities.jsx";
 import Articles from "./components/Articles.jsx";
@@ -37,7 +36,7 @@ import InvitePeople from "./components/InvitePeople.jsx";
 import Compost from "./components/Compost.jsx";
 import ArticleApply from "./components/ArticleApply.jsx";
 import Donate from "./components/Donate.jsx";
-import Messenger from "./components/Messenger.jsx";
+import MessengerPage from "./components/MessengerPage.jsx";
 
 // Auth & Profile
 import ProfilePageWrapper from "./components/ProfilePageWrapper.jsx";
@@ -49,6 +48,9 @@ import LogIn from "./components/LogIn.jsx";
 // ==========================================================
 function AppRoutes() {
   const location = useLocation();
+  
+  // 1. Extract user from context to pass to pages that need it
+  const { user } = useContext(AuthContext);
 
   // List of routes where the Header should not be visible
   const hideHeaderRoutes = [
@@ -103,7 +105,9 @@ function AppRoutes() {
         <Route path="/poll-create" element={<PollCreate />} />
         <Route path="/create-community" element={<CommunityForm />} />
         <Route path="/create-article" element={<ArticleCreate />} />
-        <Route path="/messenger" element={<Messenger />} />
+        
+        {/* FIX: Messenger now receives the currentUser from Context */}
+        <Route path="/messenger" element={<MessengerPage currentUser={user} />} />
         
         {/* Utility Routes */}
         <Route path="/invite-people" element={<InvitePeople />} />
@@ -120,8 +124,6 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      {/* SearchProvider must be inside AuthProvider if it needs user data, 
-          but outside BrowserRouter so it's available everywhere. */}
       <SearchProvider>
         <BrowserRouter>
           <AppRoutes />

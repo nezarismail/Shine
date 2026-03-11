@@ -1,7 +1,6 @@
 // ================== DATASOURCE ==================
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ================== GENERATOR ==================
@@ -37,18 +36,18 @@ enum RequestStatus {
 // ================= MODELS =================
 
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  username     String    @unique
+  id           String   @id @default(uuid())
+  email        String   @unique
+  username     String   @unique
   name         String
   password     String
   image        String?
   description  String?
-  isAuthorized Boolean   @default(false)
-  isSupporter  Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  roleLevel    String    @default("Starter")
+  isAuthorized Boolean  @default(false)
+  isSupporter  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  roleLevel    String   @default("Starter")
 
   // Content Relations
   posts         Post[]
@@ -77,8 +76,8 @@ model User {
   blockedBy    Block[]   @relation("blocked")
 
   // Messaging Relations
-  sentMessages  Message[]
-  conversations ConversationMember[]
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
 
   // Interactive Relations
   votedPolls PollOption[]
@@ -289,19 +288,19 @@ model Flag {
 }
 
 model Community {
-  id                String            @id @default(uuid())
-  name              String
-  interests         String[]          @default([])
-  slogan            String?
-  discription       String?
-  icon              String?
-  banner            String?
-  status            CommunityStatus   @default(PUBLIC)
-  creatorId         String
-  creator           User              @relation("Creator", fields: [creatorId], references: [id])
-  posts             Post[]
-  communityMembers  CommunityMember[]
-  requests          CommunityRequest[]
+  id               String            @id @default(uuid())
+  name             String
+  interests        String[]          @default([])
+  slogan           String?
+  discription      String?
+  icon             String?
+  banner           String?
+  status           CommunityStatus   @default(PUBLIC)
+  creatorId        String
+  creator          User              @relation("Creator", fields: [creatorId], references: [id])
+  posts            Post[]
+  communityMembers CommunityMember[]
+  requests         CommunityRequest[]
 }
 
 model CommunityMember {
@@ -338,46 +337,24 @@ model Follows {
   @@unique([followerId, followingId])
 }
 
-// ================= MESSAGING LOGIC =================
-
-model Conversation {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt 
-
-  isGroup   Boolean  @default(false)
-  name      String?  
-  
-  messages  Message[]
-  members   ConversationMember[]
-
-  @@index([updatedAt])
-}
-
-model ConversationMember {
-  id             String       @id @default(uuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  
-  lastReadAt     DateTime     @default(now()) 
-
-  @@unique([userId, conversationId])
-}
-
 model Message {
-  id             String       @id @default(uuid())
-  text           String
-  createdAt      DateTime     @default(now())
+  id         String   @id @default(uuid())
+  text       String?
+  imageUrl   String?
+  senderId   String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   
-  senderId       String
-  sender         User         @relation(fields: [senderId], references: [id])
+  // New Fields
+  isRead     Boolean  @default(false)
+  isLiked    Boolean  @default(false)
+  createdAt  DateTime @default(now())
   
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // For deleting messages (soft delete or individual delete)
+  deletedBy  String[] @default([]) 
 
-  @@index([conversationId])
+  @@index([senderId, receiverId])
 }
 
 model Notification {
