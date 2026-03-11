@@ -89,3 +89,10 @@
   width: 100%;
   max-width: 1000px; /* optional: limit max width for nicer center layout */
 }
+
+@media (max-width: 1216px) {
+  .communities-page .communities-container { padding: 0 12px 16px; }
+  .communities-page .left-column, .communities-page .right-column { display:none; }
+  .communities-page .center-column { padding-top: 8px; }
+  .communities-page .center-column .center-content { gap: 12px; }
+}

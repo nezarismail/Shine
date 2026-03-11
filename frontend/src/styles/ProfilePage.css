@@ -264,3 +264,20 @@
   color: #888;
   font-size: 1.1rem;
 }
+@media (max-width: 1216px) {
+  .profile-page { padding-top: 86px; }
+  .profile-top, .tab-content, .divider-wrapper, .profile-tabs { padding-left: 14px; padding-right: 14px; }
+  .profile-top { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .profile-left { width: 100%; gap: 12px; align-items:flex-start; }
+  .profile-image { width: 92px; height: 92px; }
+  .profile-info { gap: 4px; }
+  .profile-name { font-size: 22px; }
+  .profile-username { font-size: 15px; }
+  .profile-badge { font-size: 14px; padding: 4px 8px; }
+  .profile-follow { font-size: 14px; gap: 14px; margin-top:8px; }
+  .profile-description { max-width: 100%; font-size: 14px; }
+  .profile-tabs { flex-direction: column; align-items: stretch; gap: 10px; }
+  .tabs-left { overflow-x: auto; gap: 14px; }
+  .tab-btn { font-size: 15px; white-space: nowrap; }
+  .tabs-right { justify-content: space-between; }
+}
