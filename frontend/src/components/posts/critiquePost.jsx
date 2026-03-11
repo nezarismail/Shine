@@ -413,15 +413,15 @@ export default function CritiquePost({ postId, initialData }) {
 
         {/* Footer Actions */}
         {!isEditing && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 15 }}>
+          <div className="post-footer-actions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 15 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
               <div style={{ fontSize: 12, color: "#6b7280" }}>
                 {isPostUpdated() && "(Updated) "}
-                {formattedDate} • {formattedTime}
+                <span className="post-date-stack">{formattedDate}<br />{formattedTime}</span>
               </div>
               {sources.length > 0 && (
                 <button onClick={(e) => { e.stopPropagation(); setShowSources(!showSources); }} style={{ background: "transparent", border: "none", color: "#FFC847", fontSize: 16, fontWeight: 500, cursor: "pointer" }}>
-                  {showSources ? "Hide Sources" : "View Sources"}
+                  {showSources ? "Hide Sources" : "Sources"}
                 </button>
               )}
             </div>
