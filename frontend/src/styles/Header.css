@@ -187,3 +187,10 @@ background-color: #ffffff;
   background: transparent;
   box-shadow: none;
 }
+@media (max-width: 1216px) {
+  .header { padding: 10px 12px; }
+  .header-left .logo { height: 34px; }
+  .mobile-controls { display:flex; align-items:center; gap:8px; }
+  .mobile-icon { width: 24px; height: 24px; }
+  .menu-toggle { border:none; background:transparent; font-size:24px; color:#1C274C; }
+}

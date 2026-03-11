@@ -95,7 +95,7 @@ const RightSidebar = () => {
   };
 
   return (
-    <div
+    <div className="forum-right-sidebar"
       style={{
         width: "100%",
         display: "flex",
@@ -118,7 +118,7 @@ const RightSidebar = () => {
       )}
 
       {/* ================= EVENT BANNER ================= */}
-      <div
+      <div className="forum-events-card"
         style={{
           position: "relative",
           width: "100%",
@@ -179,7 +179,7 @@ const RightSidebar = () => {
       </div>
 
       {/* ================= FRIENDS SECTION ================= */}
-      <div
+      <div className="forum-friends-card"
         style={{
           width: "100%",
           minHeight: "475px",
@@ -236,7 +236,7 @@ const RightSidebar = () => {
       </div>
 
       {/* ================= POST BUTTON ================= */}
-      <div style={{ width: "100%", position: "relative" }} ref={popupRef}>
+      <div className="forum-post-card" style={{ width: "100%", position: "relative" }} ref={popupRef}>
         <button
           onClick={() => setShowPopup(!showPopup)}
           style={{

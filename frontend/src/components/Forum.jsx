@@ -13,7 +13,7 @@ export default function Forum() {
 
   const [selectedPostId, setSelectedPostId] = useState(postId || null);
   const [feed, setFeed] = useState([]);
-
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const scrollPosRef = useRef(0);
 
   useEffect(() => {
@@ -42,6 +42,22 @@ export default function Forum() {
   return (
     <div className="forum-page">
       <Header />
+      <div className="forum-mobile-topbar">
+        <button className="forum-mobile-menu-btn" onClick={() => setMobileNavOpen(true)}>☰ Menu</button>
+      </div>
+
+      {mobileNavOpen && (
+        <>
+          <div className="mobile-drawer-overlay" onClick={() => setMobileNavOpen(false)} />
+          <aside className="mobile-left-drawer">
+            <button className="mobile-drawer-close" onClick={() => setMobileNavOpen(false)}>✕</button>
+            <button onClick={() => navigate('/opinion-create')}>Post</button>
+            <button onClick={() => navigate('/events')}>Events</button>
+            <button onClick={() => navigate(`/${JSON.parse(localStorage.getItem('user') || 'null')?.username || ''}/friends`)}>Friends</button>
+            <button onClick={() => navigate('/messages')}>Messenger</button>
+          </aside>
+        </>
+      )}
 
       <div className="forum-container">
         <aside className="left-column">

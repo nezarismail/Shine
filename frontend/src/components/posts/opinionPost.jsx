@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useContext, useRef } from "react";
-import PostCard from "./PostCard";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import PostCard from "/workspaces/Shine/frontend/src/components/posts/PostCard.jsx";
+import { useNavigate, Link } from "react-router-dom";
 import { getCommunityById } from "/workspaces/Shine/frontend/src/utlis/getCommunity.js";
-import SharePopup from "./SharePopup"; 
-import { AuthContext } from "/workspaces/Shine/frontend/src/components/AuthProvider.jsx";
+import { AuthContext } from "/workspaces/Shine/frontend/src/components/AuthProvider.jsx"; 
+import SharePopup from "/workspaces/Shine/frontend/src/components/posts/SharePopup.jsx";
 
 // Icons
 import ShareIcon from "/workspaces/Shine/frontend/src/assets/Share.svg";
@@ -13,7 +13,7 @@ import FlagIcon from "/workspaces/Shine/frontend/src/assets/Flag.svg";
 import ArrowIcon from "/workspaces/Shine/frontend/src/assets/arrow.svg";
 import CommentIcon from "/workspaces/Shine/frontend/src/assets/comment.svg";
 import HeartIcon from "/workspaces/Shine/frontend/src/assets/Heart.svg";
-import HeartClickedIcon from "/workspaces/Shine/frontend/src/assets/HeartC.svg";
+import HeartClickedIcon from "/workspaces/Shine/frontend/src/assets/HeartC.svg"; 
 import MenuIcon from "/workspaces/Shine/frontend/src/assets/Menu.svg"; 
 import profileDefault from "/workspaces/Shine/frontend/src/assets/profileDefault.svg";
 
@@ -21,8 +21,11 @@ const BACKEND_URL = "https://studious-robot-r4wpqgpjp572wj5-5000.app.github.dev"
 
 // --- Sub-components ---
 
-function ImageMaximizer({ images, currentIndex, onClose, onPrev, onNext }) {
+function ImageMaximizer({ media, currentIndex, onClose, onPrev, onNext }) {
   if (currentIndex === null) return null;
+
+  const currentMedia = media[currentIndex];
+  const isVideo = currentMedia.match(/\.(mp4|webm|ogg)$/i);
 
   return (
     <div style={{
@@ -36,22 +39,32 @@ function ImageMaximizer({ images, currentIndex, onClose, onPrev, onNext }) {
         color: "white", fontSize: 40, cursor: "pointer", zIndex: 3001
       }}>&times;</button>
 
-      {images.length > 1 && (
+      {media.length > 1 && (
         <>
           <button onClick={(e) => { e.stopPropagation(); onPrev(); }} style={arrowStyle({ left: 30 })}>&#10094;</button>
           <button onClick={(e) => { e.stopPropagation(); onNext(); }} style={arrowStyle({ right: 30 })}>&#10095;</button>
         </>
       )}
 
-      <img 
-        src={images[currentIndex]} 
-        alt="Maximized view" 
-        style={{ maxWidth: "90%", maxHeight: "85%", borderRadius: 8, objectFit: "contain" }}
-        onClick={(e) => e.stopPropagation()} 
-      />
+      {isVideo ? (
+        <video 
+          src={currentMedia} 
+          controls 
+          autoPlay 
+          style={{ maxWidth: "90%", maxHeight: "85%", borderRadius: 8 }} 
+          onClick={(e) => e.stopPropagation()} 
+        />
+      ) : (
+        <img 
+          src={currentMedia} 
+          alt="" 
+          style={{ maxWidth: "90%", maxHeight: "85%", borderRadius: 8, objectFit: "contain" }}
+          onClick={(e) => e.stopPropagation()} 
+        />
+      )}
 
       <div style={{ position: "absolute", bottom: 40, color: "white", background: "rgba(0,0,0,0.5)", padding: "5px 15px", borderRadius: 20, fontSize: 14 }}>
-        {currentIndex + 1} / {images.length}
+        {currentIndex + 1} / {media.length}
       </div>
     </div>
   );
@@ -61,7 +74,7 @@ const arrowStyle = (pos) => ({
   position: "absolute", ...pos, background: "rgba(255,255,255,0.1)", border: "none",
   color: "white", fontSize: 24, width: 50, height: 50, borderRadius: "50%", 
   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-  transition: "background 0.2s"
+  zIndex: 3001
 });
 
 function DeleteModal({ onConfirm, onCancel }) {
@@ -75,7 +88,7 @@ function DeleteModal({ onConfirm, onCancel }) {
         background: "white", padding: 30, borderRadius: 20, width: 350,
         textAlign: "center", boxShadow: "0 10px 25px rgba(0,0,0,0.1)"
       }}>
-        <h3 style={{ color: "#1C274C", marginBottom: 20 }}>Delete this analysis?</h3>
+        <h3 style={{ color: "#1C274C", marginBottom: 20 }}>Do you want to delete this post?</h3>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           <button onClick={onCancel} style={{
             padding: "10px 20px", borderRadius: 8, border: "1px solid #1C274C",
@@ -115,7 +128,7 @@ function Toast({ message, type = "success", duration = 2000, onClose }) {
 
 // --- Main Component ---
 
-export default function AnalysisPost({ postId, initialData }) {
+export default function OpinionPost({ postId, initialData }) {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   const postRef = useRef(null);
@@ -132,7 +145,8 @@ export default function AnalysisPost({ postId, initialData }) {
   const [toast, setToast] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
-  const [hasViewed, setHasViewed] = useState(false);
+  
+  // Maximizer State
   const [maximizedIndex, setMaximizedIndex] = useState(null);
 
   const showToast = (message, type = "success") => setToast({ message, type });
@@ -145,28 +159,33 @@ export default function AnalysisPost({ postId, initialData }) {
     return updated - created > 2000;
   };
 
+  /**
+   * VIEW LOGIC: Facebook style
+   * 1. Only triggers if post hasn't been "viewed" in this current session.
+   * 2. Requires the user to look at the post for at least 2 seconds.
+   */
   useEffect(() => {
     const currentId = initialData?.id || initialData?._id || postId;
-    if (!currentId || hasViewed) return;
+    if (!currentId) return;
 
-    const sessionKey = `viewed_analysis_${currentId}`;
-    if (sessionStorage.getItem(sessionKey)) {
-      setHasViewed(true);
-      return;
-    }
+    // Check if viewed in this session to prevent spamming the server
+    const sessionKey = `viewed_post_${currentId}`;
+    if (sessionStorage.getItem(sessionKey)) return;
 
     let timer;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
+          // User is looking at the post, start a 2-second timer
           timer = setTimeout(() => {
             recordView(currentId, sessionKey);
           }, 2000); 
         } else {
+          // User scrolled away before 2 seconds, cancel the view
           clearTimeout(timer);
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.5 } // 50% visibility
     );
 
     if (postRef.current) observer.observe(postRef.current);
@@ -175,9 +194,12 @@ export default function AnalysisPost({ postId, initialData }) {
       observer.disconnect();
       clearTimeout(timer);
     };
-  }, [postId, post, hasViewed]);
+  }, [postId, post]);
 
   const recordView = async (currentId, sessionKey) => {
+    // Double check session storage just in case of race conditions
+    if (sessionStorage.getItem(sessionKey)) return;
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/${currentId}/view`, {
         method: "POST",
@@ -187,7 +209,7 @@ export default function AnalysisPost({ postId, initialData }) {
       if (res.ok) {
         const data = await res.json();
         setPost(prev => ({ ...prev, viewsCount: data.viewsCount }));
-        setHasViewed(true);
+        // Mark as viewed for this session
         sessionStorage.setItem(sessionKey, "true");
       }
     } catch (e) { console.error("View tracking error", e); }
@@ -241,6 +263,7 @@ export default function AnalysisPost({ postId, initialData }) {
         ...prev,
         likesCount: data.likesCount !== undefined ? data.likesCount : prev.likesCount,
         sharesCount: data.sharesCount !== undefined ? data.sharesCount : prev.sharesCount,
+        commentsCount: data.commentsCount !== undefined ? data.commentsCount : prev.commentsCount
       }));
 
       showToast(data.status ? successMsg : "Action removed");
@@ -257,9 +280,13 @@ export default function AnalysisPost({ postId, initialData }) {
       });
       if (res.ok) {
         const updatedPost = await res.json();
-        setPost(prev => ({ ...prev, text: updatedPost.text, updatedAt: updatedPost.updatedAt }));
+        setPost(prev => ({ 
+          ...prev, 
+          text: updatedPost.text, 
+          updatedAt: updatedPost.updatedAt 
+        }));
         setIsEditing(false);
-        showToast("Analysis updated successfully");
+        showToast("Post updated successfully");
       }
     } catch (err) { showToast("Update failed", "error"); }
   };
@@ -283,7 +310,7 @@ export default function AnalysisPost({ postId, initialData }) {
     ? (post.author.image.startsWith('http') ? post.author.image : `${BACKEND_URL}${post.author.image}`) 
     : profileDefault;
 
-  const mediaList = post.media?.filter(m => m.type === "image" || m.url.endsWith('.gif')).map(m => m.url.startsWith('http') ? m.url : `${BACKEND_URL}${m.url}`) || [];
+  const mediaList = post.media?.map(m => m.url.startsWith('http') ? m.url : `${BACKEND_URL}${m.url}`) || [];
   const community = post.community || getCommunityById(post.communityId);
   const MAX_CHARS = 900;
   const displayText = !expanded && post.text?.length > MAX_CHARS ? post.text.slice(0, MAX_CHARS) + "..." : post.text;
@@ -299,7 +326,7 @@ export default function AnalysisPost({ postId, initialData }) {
       {showDeleteModal && <DeleteModal onConfirm={handleDelete} onCancel={() => setShowDeleteModal(false)} />}
       
       <ImageMaximizer 
-        images={mediaList} 
+        media={mediaList} 
         currentIndex={maximizedIndex} 
         onClose={() => setMaximizedIndex(null)}
         onNext={() => setMaximizedIndex((maximizedIndex + 1) % mediaList.length)}
@@ -307,32 +334,16 @@ export default function AnalysisPost({ postId, initialData }) {
       />
 
       <PostCard ref={postRef}>
+        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <img 
-              src={authorImage} 
-              onClick={(e) => { e.stopPropagation(); navigate(`/profile/${post.author?.username}`); }}
-              style={{ width: 41, height: 41, borderRadius: 999, objectFit: "cover", cursor: "pointer" }} 
-              alt="" 
-            />
-            <div>
-              <div 
-                onClick={(e) => { e.stopPropagation(); navigate(`/profile/${post.author?.username}`); }}
-                style={{ fontSize: 16, fontWeight: 400, color: "#1C274C", cursor: "pointer" }}
-              >
-                {post.author?.name || "User"}
+            <Link to={`/profile/${post.author?.username}`} style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+              <img src={authorImage} alt="" style={{ width: 41, height: 41, borderRadius: 999, objectFit: "cover" }} />
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 400, color: "#1C274C" }}>{post.author?.name || "User"}</div>
+                {community?.name && <div style={{ fontSize: 12, color: "#6b7280" }}>from <span style={{ fontWeight: "bold", color: "#1C274C" }}>{community.name}</span></div>}
               </div>
-              {community?.name && (
-                <div style={{ fontSize: 12, color: "#6b7280" }}>
-                  from <span 
-                    onClick={(e) => { e.stopPropagation(); navigate(`/community/${post.communityId}`); }}
-                    style={{ fontWeight: "bold", color: "#1C274C", cursor: "pointer" }}
-                  >
-                    {community.name}
-                  </span>
-                </div>
-              )}
-            </div>
+            </Link>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
             <div style={{ fontSize: 16, fontWeight: 500, color: "#1C274C" }}>{post.viewsCount || 0} views</div>
@@ -340,6 +351,7 @@ export default function AnalysisPost({ postId, initialData }) {
           </div>
         </div>
 
+        {/* Text Content */}
         <div style={{ marginTop: 12, display: "flex", gap: 20 }}>
           <div style={{ flex: 1 }}>
              <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 10 }}>
@@ -373,14 +385,19 @@ export default function AnalysisPost({ postId, initialData }) {
           </div>
           {mediaList.length > 0 && !isEditing && (
             <div 
-              style={{ width: 277, height: 275, borderRadius: 12, overflow: "hidden", flexShrink: 0, cursor: "zoom-in" }}
+              style={{ width: 277, height: 275, borderRadius: 12, overflow: "hidden", flexShrink: 0, cursor: "zoom-in", position: "relative" }}
               onClick={(e) => { e.stopPropagation(); setMaximizedIndex(0); }}
             >
-              <img src={mediaList[0]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              {mediaList[0].match(/\.(mp4|webm|ogg)$/i) ? (
+                <video src={mediaList[0]} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <img src={mediaList[0]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              )}
             </div>
           )}
         </div>
 
+        {/* Footer Actions */}
         {!isEditing && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 15 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -402,7 +419,7 @@ export default function AnalysisPost({ postId, initialData }) {
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <img src={CommentIcon} onClick={() => navigate(`/post/${post.id || post._id}`)} style={{ width: 20, cursor: "pointer" }} />
+                <img src={CommentIcon} onClick={(e) => { e.stopPropagation(); navigate(`/post/${post.id || post._id}`); }} style={{ width: 20, cursor: "pointer" }} />
                 <span style={{ fontSize: 14, color: "#1C274C", fontWeight: 510 }}>{post.commentsCount || 0}</span>
               </div>
 
@@ -419,7 +436,7 @@ export default function AnalysisPost({ postId, initialData }) {
                   {showFlagPopup && (
                     <div style={{ position: "absolute", bottom: "100%", right: 0, background: "white", boxShadow: "0 2px 10px rgba(0,0,0,0.1)", borderRadius: 8, padding: 8, width: 200, zIndex: 10 }}>
                       {["Spam", "False Info", "Inappropriate"].map(opt => (
-                        <div key={opt} onClick={() => { showToast(`Reported for ${opt}`); setShowFlagPopup(false); }} style={{ padding: "8px", cursor: "pointer", fontSize: 13 }}>{opt}</div>
+                        <div key={opt} onClick={(e) => { e.stopPropagation(); showToast(`Reported for ${opt}`); setShowFlagPopup(false); }} style={{ padding: "8px", cursor: "pointer", fontSize: 13 }}>{opt}</div>
                       ))}
                     </div>
                   )}
@@ -433,8 +450,8 @@ export default function AnalysisPost({ postId, initialData }) {
                   <img src={MenuIcon} onClick={(e) => { e.stopPropagation(); setShowMenuPopup(!showMenuPopup); }} style={{ width: 20, cursor: "pointer" }} />
                   {showMenuPopup && (
                     <div style={{ position: "absolute", bottom: "100%", right: 0, background: "white", boxShadow: "0 0px 10px rgba(0,0,0,0.1)", borderRadius: 8, padding: 6, width: 120, zIndex: 10 }}>
-                      <div onClick={() => { setIsEditing(true); setShowMenuPopup(false); }} style={{ padding: "8px", cursor: "pointer", fontSize: 13, color: "#1C274C" }}>Edit</div>
-                      <div onClick={() => { setShowDeleteModal(true); setShowMenuPopup(false); }} style={{ padding: "8px", cursor: "pointer", fontSize: 13, color: "#FF4C4C" }}>Delete</div>
+                      <div onClick={(e) => { e.stopPropagation(); setIsEditing(true); setShowMenuPopup(false); }} style={{ padding: "8px", cursor: "pointer", fontSize: 13, color: "#1C274C" }}>Edit</div>
+                      <div onClick={(e) => { e.stopPropagation(); setShowDeleteModal(true); setShowMenuPopup(false); }} style={{ padding: "8px", cursor: "pointer", fontSize: 13, color: "#FF4C4C" }}>Delete</div>
                     </div>
                   )}
                 </div>
@@ -455,7 +472,7 @@ export default function AnalysisPost({ postId, initialData }) {
           </div>
         )}
       </PostCard>
-      {showShare && <SharePopup id={post.id || post._id} type="post" onClose={() => setShowShare(false)} />}
+      {showShare && <SharePopup postId={post.id || post._id} onClose={() => setShowShare(false)} />}
     </>
   );
 }

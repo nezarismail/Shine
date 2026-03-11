@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from "react";
 import { SearchContext } from "/workspaces/Shine/frontend/src/searchContext.jsx";
 import magnifier from "../../assets/magnifier.svg";
 import closeIcon from "../../assets/close.svg";
-import axios from "axios"; 
+import axios from "axios";
 
 const LeftSidebar = () => {
   const { searchQuery, setSearchQuery } = useContext(SearchContext);
@@ -17,11 +17,11 @@ const LeftSidebar = () => {
     const fetchAllSidebarData = async () => {
       setLoading(true);
       try {
-        // 1. Original Trends Fetch (Group 1 & 2)
+        // 1. Fetch Trends
         const trendRes = await axios.get(`${API_BASE}/posts/trends`);
         setTrends(trendRes.data);
 
-        // 2. Messenger Activity Fetch (Group 3)
+        // 2. Fetch Messenger Activity & Notifications
         const [inboxRes, notifRes] = await Promise.allSettled([
           axios.get(`${API_BASE}/messenger/inbox`),
           axios.get(`${API_BASE}/notifications`)
@@ -51,10 +51,10 @@ const LeftSidebar = () => {
   };
 
   return (
-    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+    <div className="forum-left-sidebar" style={{ width: "100%", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       
       {/* Group 1: Search & Viral Keywords */}
-      <div style={{ 
+      <div className="forum-search-card" style={{ 
         width: "100%", minHeight: "200px", borderRadius: "1.4rem", 
         border: "0.5px solid #1C274C", padding: "1.25rem", 
         backgroundColor: "#FFFFFF", display: "flex", flexDirection: "column", boxSizing: "border-box"
@@ -107,7 +107,7 @@ const LeftSidebar = () => {
       </div>
 
       {/* Group 2: Trending Hashtags */}
-      <div style={{ 
+      <div className="forum-trending-card" style={{ 
         width: "100%", borderRadius: "1.4rem", border: "0.5px solid #1C274C", 
         padding: "1.25rem", backgroundColor: "#FFFFFF", boxSizing: "border-box"
       }}>
@@ -137,7 +137,7 @@ const LeftSidebar = () => {
       </div>
 
       {/* Group 3: Messenger (Activity Group) */}
-      <div style={{ 
+      <div className="forum-messages-card" style={{ 
         width: "100%", borderRadius: "1.4rem", border: "0.5px solid #1C274C", 
         padding: "1.25rem", backgroundColor: "#FFFFFF", boxSizing: "border-box", marginBottom: "20px"
       }}>
