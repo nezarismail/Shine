@@ -133,7 +133,6 @@ export default function AnalysisPost({ postId, initialData }) {
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [hasViewed, setHasViewed] = useState(false);
-  
   const [maximizedIndex, setMaximizedIndex] = useState(null);
 
   const showToast = (message, type = "success") => setToast({ message, type });
@@ -146,12 +145,10 @@ export default function AnalysisPost({ postId, initialData }) {
     return updated - created > 2000;
   };
 
-  // Improved Facebook-style View Logic
   useEffect(() => {
     const currentId = initialData?.id || initialData?._id || postId;
     if (!currentId || hasViewed) return;
 
-    // Check session storage to see if we already counted this view in this session
     const sessionKey = `viewed_analysis_${currentId}`;
     if (sessionStorage.getItem(sessionKey)) {
       setHasViewed(true);
@@ -162,16 +159,14 @@ export default function AnalysisPost({ postId, initialData }) {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          // Post is visible, start 2-second timer
           timer = setTimeout(() => {
             recordView(currentId, sessionKey);
           }, 2000); 
         } else {
-          // User scrolled away before 2 seconds, reset timer
           clearTimeout(timer);
         }
       },
-      { threshold: 0.5 } // 50% of the post must be on screen
+      { threshold: 0.5 }
     );
 
     if (postRef.current) observer.observe(postRef.current);
@@ -300,6 +295,20 @@ export default function AnalysisPost({ postId, initialData }) {
 
   return (
     <>
+      <style>{`
+        @media (max-width: 600px) {
+          .post-timestamp {
+            display: none !important;
+          }
+          .sources-btn-label {
+            display: none;
+          }
+          .sources-btn-root::after {
+            content: "Sources";
+          }
+        }
+      `}</style>
+
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
       {showDeleteModal && <DeleteModal onConfirm={handleDelete} onCancel={() => setShowDeleteModal(false)} />}
       
@@ -389,13 +398,19 @@ export default function AnalysisPost({ postId, initialData }) {
         {!isEditing && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 15 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <div style={{ fontSize: 12, color: "#6b7280" }}>
+              <div className="post-timestamp" style={{ fontSize: 12, color: "#6b7280" }}>
                 {isPostUpdated() && "(Updated) "}
                 {formattedDate} • {formattedTime}
               </div>
               {sources.length > 0 && (
-                <button onClick={(e) => { e.stopPropagation(); setShowSources(!showSources); }} style={{ background: "transparent", border: "none", color: "#FFC847", fontSize: 16, fontWeight: 500, cursor: "pointer" }}>
-                  {showSources ? "Hide Sources" : "View Sources"}
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setShowSources(!showSources); }} 
+                  className="sources-btn-root"
+                  style={{ background: "transparent", border: "none", color: "#FFC847", fontSize: 16, fontWeight: 500, cursor: "pointer" }}
+                >
+                  <span className="sources-btn-label">
+                    {showSources ? "Hide Sources" : "View Sources"}
+                  </span>
                 </button>
               )}
             </div>
